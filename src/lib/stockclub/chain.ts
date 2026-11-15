@@ -4,7 +4,7 @@ export const BASE_CHAIN_HEX = "0x14a34";
 export const BASE_RPC = "https://sepolia.base.org";
 export const BASE_EXPLORER = "https://sepolia.basescan.org";
 export const BASE_NAME = "Base Sepolia";
-export const CLUB_REGISTRY: string | null = null;
+export const CLUB_REGISTRY: string | null = "0x9f738e662d1c6b374cbd1bfce9ceba70807a81d7";
 
 export function signInMessage(address: string, nonce: string): string {
   return `StockClub\nSign in on Base Sepolia\n${address}\n${nonce}`;
