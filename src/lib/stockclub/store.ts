@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Challenge, Club, Contribution, MemberRow, Membership, Post, Proposal, Split, Wallet } from "./model";
+import { CLUB_REGISTRY } from "./chain";
 import { connectAccount, deployTreasury, depositUsdc, signIn } from "./wallet";
 
 export type CreateInput = {
@@ -111,7 +112,7 @@ export const useStock = create<StockState>()(
       cheers: [],
       hidden: [],
       points: 0,
-      registry: null,
+      registry: CLUB_REGISTRY,
       bumps: {},
       usdcAdd: {},
       stockAdd: {},
@@ -148,7 +149,7 @@ export const useStock = create<StockState>()(
             posts: data.posts ?? [],
             contributions: data.contributions ?? [],
             members: data.members ?? [],
-            registry: data.registry ?? null,
+            registry: data.registry ?? CLUB_REGISTRY,
             joined: data.me?.joined ?? [],
             minted: data.me?.minted ?? [],
             votes: data.me?.votes ?? {},
