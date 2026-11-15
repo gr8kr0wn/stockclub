@@ -10,8 +10,6 @@ import {
   scoreOf,
   treasuryOf,
   type Post,
-  type Proposal,
-  type Challenge,
 } from "@/lib/stockclub/model";
 import { useStock } from "@/lib/stockclub/store";
 
@@ -36,24 +34,34 @@ export function ClubView({ ticker }: { ticker: string }) {
   const votes = useStock((s) => s.votes);
   const vote = useStock((s) => s.vote);
   const userPosts = useStock((s) => s.posts);
+  const proposals = useStock((s) => s.proposals);
+  const challenges = useStock((s) => s.challenges);
+  const members = useStock((s) => s.members);
+  const registry = useStock((s) => s.registry);
   const hidden = useStock((s) => s.hidden);
   const publish = useStock((s) => s.publish);
   const hidePost = useStock((s) => s.hidePost);
   const entered = useStock((s) => s.entered);
   const enterChallenge = useStock((s) => s.enterChallenge);
+  const propose = useStock((s) => s.propose);
+  const postChallenge = useStock((s) => s.challenge);
+  const deploy = useStock((s) => s.deploy);
   const [amount, setAmount] = useState("100");
   const [draft, setDraft] = useState("");
   const [kind, setKind] = useState<Post["kind"]>("update");
+  const [proposalTitle, setProposalTitle] = useState("");
+  const [proposalBody, setProposalBody] = useState("");
+  const [challengeTitle, setChallengeTitle] = useState("");
+  const [challengeDetail, setChallengeDetail] = useState("");
+  const [challengeReward, setChallengeReward] = useState("");
   const member = club ? joined.includes(club.ticker) : false;
 
   const roster = useMemo(() => {
     if (!club) return [];
-    const list = [{ name: club.founder, role: "Founder" }];
-    if (member && wallet && wallet.name !== club.founder) {
-      list.push({ name: wallet.name, role: "You" });
-    }
-    return list;
-  }, [club, member, wallet]);
+    return members
+      .filter((person) => person.ticker === club.ticker)
+      .map((person) => ({ name: person.address.slice(0, 6) + "…" + person.address.slice(-4), role: person.role }));
+  }, [club, members]);
 
   if (!club) {
     return (
@@ -66,20 +74,20 @@ export function ClubView({ ticker }: { ticker: string }) {
     );
   }
 
-  const founder = wallet?.name === club.founder;
+  const founder = wallet?.address === club.founderAddress;
   const needsMint = club.membership === "collectible" && !minted.includes(club.ticker) && !member;
-  const members = membersOf(club, bumps);
+  const membersCount = membersOf(club, bumps);
   const treasury = treasuryOf(club, usdcAdd, stockAdd);
   const posts = userPosts.filter((post) => post.ticker === club.ticker && !hidden.includes(post.id));
-  const proposals: Proposal[] = [];
-  const challenges: Challenge[] = [];
+  const clubProposals = proposals.filter((item) => item.ticker === club.ticker);
+  const clubChallenges = challenges.filter((item) => item.ticker === club.ticker);
   const txs = contributions.filter((row) => row.ticker === club.ticker);
-  function gate(action: () => void) {
+  function gate(action: () => void | Promise<unknown>) {
     if (!wallet) {
       openConnect();
       return;
     }
-    action();
+    void action();
   }
 
   return (
@@ -95,7 +103,7 @@ export function ClubView({ ticker }: { ticker: string }) {
           </h1>
           <p className="lede">{club.description}</p>
           <div className="club-hero-stats">
-            <span><b>{compact(members)}</b> members</span>
+            <span><b>{compact(membersCount)}</b> members</span>
             <span><b>{money(treasury.total)}</b> treasury</span>
             <span><b>{scoreOf(club, bumps, usdcAdd).toLocaleString("en-US")}</b> score</span>
             <span><b>{club.membership === "free" ? "Free" : "Collectible"}</b> membership</span>
@@ -157,8 +165,8 @@ export function ClubView({ ticker }: { ticker: string }) {
             className="panel composer"
             onSubmit={(event) => {
               event.preventDefault();
-              gate(() => {
-                const result = publish(club.ticker, kind, draft);
+              gate(async () => {
+                const result = await publish(club.ticker, kind, draft);
                 if (result.ok) setDraft("");
               });
             }}
@@ -208,7 +216,11 @@ export function ClubView({ ticker }: { ticker: string }) {
         <div className="stack">
           <article className="panel">
             <h2>{club.name} treasury</h2>
-            <p className="fine">Simulated USDC and stock allocation. No real funds. A vote does not buy an asset.</p>
+            <p className="fine">
+              {registry
+                ? "USDC is Base USDC. You approve it, then it is pulled into the club contract. A vote does not buy a stock."
+                : "The treasury contract is not on Base yet. Deploy it before any USDC can move. A vote does not buy a stock."}
+            </p>
             <div className="stat-row">
               <div>
                 <strong>{money(treasury.usdc)}</strong>
@@ -216,7 +228,7 @@ export function ClubView({ ticker }: { ticker: string }) {
               </div>
               <div>
                 <strong>{money(treasury.stock)}</strong>
-                <span>Simulated {club.ticker}</span>
+                <span>Allocated {club.ticker}</span>
                 <TokenNote ticker={club.ticker} />
               </div>
               <div>
@@ -241,12 +253,24 @@ export function ClubView({ ticker }: { ticker: string }) {
               />
             </label>
             <button type="submit" className="btn btn-lime">
-              Add to treasury
+              {registry ? "Send USDC" : "Treasury not deployed"}
             </button>
           </form>
+          {registry ? (
+            <p className="muted">
+              Contract{" "}
+              <a href={`${"https://sepolia.basescan.org"}/address/${registry}`} target="_blank" rel="noreferrer">
+                {registry}
+              </a>
+            </p>
+          ) : (
+            <button type="button" className="btn btn-white" onClick={() => gate(() => deploy())}>
+              Deploy treasury on Base Sepolia
+            </button>
+          )}
           <article className="panel">
             <h2>Transactions</h2>
-            {txs.length === 0 ? <p className="muted">No contributions from this session yet.</p> : null}
+            {txs.length === 0 ? <p className="muted">No confirmed USDC deposits yet.</p> : null}
             <ul className="tx-list">
               {txs.map((row) => (
                 <li key={row.id}>
@@ -262,17 +286,46 @@ export function ClubView({ ticker }: { ticker: string }) {
 
       {tab === "Challenges" ? (
         <div className="featured-grid">
-          {challenges.length === 0 ? (
-            <Empty title="No challenges" body="Nothing is scheduled. Challenges are not preloaded." />
+          <form
+            className="panel form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              gate(async () => {
+                const result = await postChallenge(club.ticker, challengeTitle, challengeDetail, challengeReward);
+                if (result.ok) {
+                  setChallengeTitle("");
+                  setChallengeDetail("");
+                  setChallengeReward("");
+                }
+              });
+            }}
+          >
+            <h2>New challenge</h2>
+            <label>
+              Title
+              <input value={challengeTitle} onChange={(event) => setChallengeTitle(event.target.value)} placeholder="Ship one sourced note" />
+            </label>
+            <label>
+              What done looks like
+              <textarea value={challengeDetail} onChange={(event) => setChallengeDetail(event.target.value)} rows={3} />
+            </label>
+            <label>
+              Reward
+              <input value={challengeReward} onChange={(event) => setChallengeReward(event.target.value)} placeholder="Club points" />
+            </label>
+            <button type="submit" className="btn btn-lime btn-slim">Post challenge</button>
+          </form>
+          {clubChallenges.length === 0 ? (
+            <Empty title="No challenges" body="Members can post one. Nothing is preloaded." />
           ) : null}
-          {challenges.map((challenge) => {
+          {clubChallenges.map((challenge) => {
             const done = entered.includes(challenge.id);
             return (
               <article key={challenge.id} className="panel challenge">
                 <h2>{challenge.title}</h2>
                 <p>{challenge.detail}</p>
                 <p className="muted">{challenge.reward}</p>
-                <strong>{challenge.entries + (done ? 1 : 0)} entries</strong>
+                <strong>{challenge.entries} entries</strong>
                 <button
                   type="button"
                   className="btn btn-white"
@@ -289,13 +342,37 @@ export function ClubView({ ticker }: { ticker: string }) {
 
       {tab === "Governance" ? (
         <div className="stack">
-          {proposals.length === 0 ? (
-            <Empty title="No open proposals" body="Admins and eligible members can put treasury intent to a vote." />
+          <form
+            className="panel form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              gate(async () => {
+                const result = await propose(club.ticker, proposalTitle, proposalBody, 3);
+                if (result.ok) {
+                  setProposalTitle("");
+                  setProposalBody("");
+                }
+              });
+            }}
+          >
+            <h2>New proposal</h2>
+            <label>
+              Title
+              <input value={proposalTitle} onChange={(event) => setProposalTitle(event.target.value)} placeholder="Hold the USDC" />
+            </label>
+            <label>
+              Reason
+              <textarea value={proposalBody} onChange={(event) => setProposalBody(event.target.value)} rows={3} />
+            </label>
+            <button type="submit" className="btn btn-lime btn-slim">Open a 3-day vote</button>
+          </form>
+          {clubProposals.length === 0 ? (
+            <Empty title="No open proposals" body="Members can put a treasury intent to a vote. A yes does not buy an asset." />
           ) : null}
-          {proposals.map((proposal) => {
+          {clubProposals.map((proposal) => {
             const choice = votes[proposal.id];
-            const yes = proposal.yes + (choice === "yes" ? 1 : 0);
-            const no = proposal.no + (choice === "no" ? 1 : 0);
+            const yes = proposal.yes;
+            const no = proposal.no;
             const total = yes + no;
             return (
               <article key={proposal.id} className="panel">

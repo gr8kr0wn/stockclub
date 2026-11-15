@@ -18,6 +18,7 @@ import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as TreasuryRouteImport } from './routes/treasury'
 import { Route as ApiMarketRouteImport } from './routes/api/market'
+import { Route as ApiWorldRouteImport } from './routes/api/world'
 import { Route as ClubTickerRouteImport } from './routes/club.$ticker'
 
 const IndexRoute = IndexRouteImport.update({
@@ -65,6 +66,11 @@ const ApiMarketRoute = ApiMarketRouteImport.update({
   path: '/api/market',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiWorldRoute = ApiWorldRouteImport.update({
+  id: '/api/world',
+  path: '/api/world',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ClubTickerRoute = ClubTickerRouteImport.update({
   id: '/club/$ticker',
   path: '/club/$ticker',
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
 export interface FileRoutesByTo {
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
 export interface FileRoutesById {
@@ -106,6 +114,7 @@ export interface FileRoutesById {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
 export interface FileRouteTypes {
@@ -120,6 +129,7 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/world'
     | '/club/$ticker'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/world'
     | '/club/$ticker'
   id:
     | '__root__'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/world'
     | '/club/$ticker'
   fileRoutesById: FileRoutesById
 }
@@ -157,6 +169,7 @@ export interface RootRouteChildren {
   RewardsRoute: typeof RewardsRoute
   TreasuryRoute: typeof TreasuryRoute
   ApiMarketRoute: typeof ApiMarketRoute
+  ApiWorldRoute: typeof ApiWorldRoute
   ClubTickerRoute: typeof ClubTickerRoute
 }
 
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMarketRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/world': {
+      id: '/api/world'
+      path: '/api/world'
+      fullPath: '/api/world'
+      preLoaderRoute: typeof ApiWorldRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/club/$ticker': {
       id: '/club/$ticker'
       path: '/club/$ticker'
@@ -245,6 +265,7 @@ const rootRouteChildren: RootRouteChildren = {
   RewardsRoute: RewardsRoute,
   TreasuryRoute: TreasuryRoute,
   ApiMarketRoute: ApiMarketRoute,
+  ApiWorldRoute: ApiWorldRoute,
   ClubTickerRoute: ClubTickerRoute,
 }
 export const routeTree = rootRouteImport

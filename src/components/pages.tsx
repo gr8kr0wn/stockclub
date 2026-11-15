@@ -81,13 +81,13 @@ export function CreateView() {
       </header>
       <form
         className="panel form"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
           if (!wallet) {
             openConnect();
             return;
           }
-          const result = createClub({
+          const result = await createClub({
             name,
             ticker,
             description,
@@ -174,12 +174,12 @@ export function MyClubsView() {
   const extras = useStock((s) => s.extras);
   const joined = useStock((s) => s.joined);
   const wallet = useStock((s) => s.wallet);
-  const clubs = allClubs(extras).filter((club) => joined.includes(club.ticker) || club.founder === wallet?.name);
+  const clubs = allClubs(extras).filter((club) => joined.includes(club.ticker) || club.founderAddress === wallet?.address);
   return (
     <div className="page">
       <header className="page-intro">
         <h1>My clubs</h1>
-        <p>{wallet ? `Signed in as ${wallet.name}.` : "Connect a wallet to keep a membership list on this device."}</p>
+        <p>{wallet ? `Signed in as ${wallet.name} on Base.` : "Connect a wallet. Membership follows that address, not this browser."}</p>
       </header>
       {clubs.length === 0 ? (
         <Empty title="No memberships yet" body="Explore a ticker or create the club you wish existed." />
@@ -204,14 +204,21 @@ export function TreasuryView() {
   const usdcAdd = useStock((s) => s.usdcAdd);
   const stockAdd = useStock((s) => s.stockAdd);
   const contributions = useStock((s) => s.contributions);
+  const registry = useStock((s) => s.registry);
+  const deploy = useStock((s) => s.deploy);
+  const openConnect = useStock((s) => s.openConnect);
   const clubs = allClubs(extras).filter((club) => joined.includes(club.ticker));
-  const mine = contributions.reduce((sum, row) => sum + row.amount, 0);
+  const mine = contributions.filter((row) => row.address === wallet?.address).reduce((sum, row) => sum + row.amount, 0);
 
   return (
     <div className="page">
       <header className="page-intro">
         <h1>Treasury</h1>
-        <p>Simulated USDC and stock allocations. Nothing here is a live brokerage balance.</p>
+        <p>
+          {registry
+            ? "Confirmed Base USDC sitting in the club contract. Stock shown here is not a brokerage position."
+            : "No treasury contract on Base yet. Deploy it from a club before USDC can move."}
+        </p>
       </header>
       <div className="stat-row panel">
         <div>
@@ -249,11 +256,29 @@ export function TreasuryView() {
           })}
         </div>
       )}
+      {!registry ? (
+        <button
+          type="button"
+          className="btn btn-lime"
+          onClick={() => {
+            if (!wallet) {
+              openConnect();
+              return;
+            }
+            void deploy();
+          }}
+        >
+          Deploy treasury on Base Sepolia
+        </button>
+      ) : (
+        <p className="muted">Treasury contract {registry}</p>
+      )}
     </div>
   );
 }
 
 export function GovernanceView() {
+  const proposals = useStock((s) => s.proposals);
   return (
     <div className="page">
       <header className="page-intro">
@@ -261,7 +286,18 @@ export function GovernanceView() {
         <p>Votes record what the club wants. They do not authorize an asset purchase.</p>
       </header>
       <div className="stack">
-        <Empty title="No open proposals" body="Clubs have not posted a vote. Nothing is preloaded." />
+        {proposals.length === 0 ? (
+          <Empty title="No open proposals" body="Open one from a club you belong to. Nothing is preloaded." />
+        ) : (
+          proposals.map((proposal) => (
+            <Link key={proposal.id} to="/club/$ticker" params={{ ticker: proposal.ticker.toLowerCase() }} className="panel">
+              <p className="kicker"><span>{proposal.ticker}</span></p>
+              <h2>{proposal.title}</h2>
+              <p>{proposal.body}</p>
+              <p className="muted">Yes {proposal.yes} · No {proposal.no} · {proposal.daysLeft} days left</p>
+            </Link>
+          ))
+        )}
       </div>
     </div>
   );
@@ -309,19 +345,20 @@ export function RewardsView() {
   const contributions = useStock((s) => s.contributions);
   const cheers = useStock((s) => s.cheers);
   const wallet = useStock((s) => s.wallet);
-  const founded = extras.some((club) => club.founder === wallet?.name);
+  const points = useStock((s) => s.points);
+  const founded = extras.some((club) => club.founderAddress === wallet?.address);
   const badges = [
     { name: "First chair", detail: "Join any club", on: joined.length > 0 },
     { name: "Founder", detail: "Create a ticker identity", on: founded },
     { name: "Ballot", detail: "Cast a governance vote", on: Object.keys(votes).length > 0 },
-    { name: "Treasury", detail: "Contribute simulated USDC", on: contributions.length > 0 },
+    { name: "Treasury", detail: "Send USDC into a club contract", on: contributions.some((row) => row.address === wallet?.address) },
     { name: "Battle", detail: "Back a club in the weekly fight", on: cheers.length > 0 },
   ];
   return (
     <div className="page">
       <header className="page-intro">
         <h1>Rewards</h1>
-        <p>Badges for real participation. Spamming a wallet does not unlock them.</p>
+        <p>{wallet ? `${points.toLocaleString("en-US")} points on ${wallet.name}.` : "Connect a wallet. Points follow that address."}</p>
       </header>
       <div className="badge-grid">
         {badges.map((badge) => (

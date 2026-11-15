@@ -21,6 +21,7 @@ export type Club = {
   cover: string;
   founded: string;
   founder: string;
+  founderAddress: string;
   split: Split;
 };
 
@@ -55,11 +56,14 @@ export type Challenge = {
 export type Contribution = {
   id: string;
   ticker: string;
+  address: string;
   amount: number;
   at: string;
 };
 
 export type Wallet = { address: string; name: string };
+
+export type MemberRow = { ticker: string; address: string; role: string };
 
 export const COVERS = [
   "/media/nvda.jpg",

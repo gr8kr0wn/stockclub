@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { Club, Contribution, Membership, Post, Split, Wallet } from "./model";
-import { findClub } from "./model";
+import type { Challenge, Club, Contribution, MemberRow, Membership, Post, Proposal, Split, Wallet } from "./model";
+import { connectAccount, deployTreasury, depositUsdc, signIn } from "./wallet";
 
 export type CreateInput = {
   name: string;
@@ -13,261 +13,274 @@ export type CreateInput = {
   cover: string;
 };
 
-type Result = { ok: true } | { ok: false; reason: string };
+type Result = { ok: true; ticker?: string } | { ok: false; reason: string };
 
 type StockState = {
   wallet: Wallet | null;
+  token: string | null;
+  providerKind: "browser" | "coinbase" | null;
   joined: string[];
   minted: string[];
   extras: Club[];
+  proposals: Proposal[];
+  challenges: Challenge[];
+  posts: Post[];
+  contributions: Contribution[];
+  members: MemberRow[];
+  votes: Record<string, "yes" | "no">;
+  entered: string[];
+  cheers: string[];
+  hidden: string[];
+  points: number;
+  registry: string | null;
   bumps: Record<string, number>;
   usdcAdd: Record<string, number>;
   stockAdd: Record<string, number>;
-  contributions: Contribution[];
-  votes: Record<string, "yes" | "no">;
-  posts: Post[];
-  hidden: string[];
-  entered: string[];
-  cheers: string[];
   connectOpen: boolean;
+  connectError: string | null;
+  busy: boolean;
   notice: string | null;
   query: string;
   openConnect: () => void;
   closeConnect: () => void;
   setNotice: (notice: string | null) => void;
   setQuery: (query: string) => void;
-  connect: (kind: "browser" | "coinbase") => void;
-  disconnect: () => void;
-  join: (ticker: string) => Result;
-  mintAndJoin: (ticker: string) => Result;
-  createClub: (input: CreateInput) => Result & { ticker?: string };
-  contribute: (ticker: string, amount: number) => Result;
-  vote: (id: string, choice: "yes" | "no") => Result;
-  publish: (ticker: string, kind: Post["kind"], body: string) => Result;
-  hidePost: (id: string) => Result;
-  enterChallenge: (id: string, ticker: string) => Result;
-  cheer: (ticker: string) => Result;
+  refresh: () => Promise<void>;
+  connect: (kind: "browser" | "coinbase") => Promise<void>;
+  disconnect: () => Promise<void>;
+  join: (ticker: string) => Promise<Result>;
+  mintAndJoin: (ticker: string) => Promise<Result>;
+  createClub: (input: CreateInput) => Promise<Result>;
+  contribute: (ticker: string, amount: number) => Promise<Result>;
+  deploy: () => Promise<Result>;
+  propose: (ticker: string, title: string, body: string, days: number) => Promise<Result>;
+  vote: (id: string, choice: "yes" | "no") => Promise<Result>;
+  challenge: (ticker: string, title: string, detail: string, reward: string) => Promise<Result>;
+  publish: (ticker: string, kind: Post["kind"], body: string) => Promise<Result>;
+  hidePost: (id: string) => Promise<Result>;
+  enterChallenge: (id: string, ticker: string) => Promise<Result>;
+  cheer: (ticker: string) => Promise<Result>;
 };
 
-function randomAddress(): string {
-  const bytes = new Uint8Array(20);
-  crypto.getRandomValues(bytes);
-  return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+function worldUrl(): string {
+  if (typeof window === "undefined") return "/api/world";
+  const prefix = window.location.pathname.match(/^\/hds-[a-z0-9]+-\d+-[a-z0-9]+/i)?.[0] ?? "";
+  return `${prefix}/api/world`;
 }
 
-function handleFrom(address: string): string {
-  return `bull${address.slice(2, 6)}`;
+async function post(body: Record<string, unknown>, token: string | null): Promise<Result> {
+  const response = await fetch(worldUrl(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await response.json()) as Result;
+  if (!data || typeof data.ok !== "boolean") return { ok: false, reason: "The club network did not answer." };
+  return data;
 }
 
-function requireWallet(wallet: Wallet | null): Result | null {
-  if (!wallet) return { ok: false, reason: "Connect a wallet first." };
-  return null;
-}
+const emptyMe = {
+  joined: [] as string[],
+  minted: [] as string[],
+  votes: {} as Record<string, "yes" | "no">,
+  entered: [] as string[],
+  cheers: [] as string[],
+  hidden: [] as string[],
+  points: 0,
+};
 
 export const useStock = create<StockState>()(
   persist(
     (set, get) => ({
       wallet: null,
+      token: null,
+      providerKind: null,
       joined: [],
       minted: [],
       extras: [],
+      proposals: [],
+      challenges: [],
+      posts: [],
+      contributions: [],
+      members: [],
+      votes: {},
+      entered: [],
+      cheers: [],
+      hidden: [],
+      points: 0,
+      registry: null,
       bumps: {},
       usdcAdd: {},
       stockAdd: {},
-      contributions: [],
-      votes: {},
-      posts: [],
-      hidden: [],
-      entered: [],
-      cheers: [],
       connectOpen: false,
+      connectError: null,
+      busy: false,
       notice: null,
       query: "",
-      openConnect: () => set({ connectOpen: true }),
+      openConnect: () => set({ connectOpen: true, connectError: null }),
       closeConnect: () => set({ connectOpen: false }),
       setNotice: (notice) => set({ notice }),
       setQuery: (query) => set({ query }),
-      connect: (kind) => {
-        const address = randomAddress();
-        const name = kind === "coinbase" ? `base${address.slice(2, 6)}` : handleFrom(address);
-        set({
-          wallet: { address, name },
-          connectOpen: false,
-          notice: `Connected ${name} on Base.`,
-        });
-      },
-      disconnect: () => set({ wallet: null, notice: "Wallet disconnected." }),
-      join: (ticker) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club) return { ok: false, reason: "Club not found." };
-        if (get().joined.includes(club.ticker)) return { ok: false, reason: "Already a member." };
-        if (club.membership === "collectible" && !get().minted.includes(club.ticker)) {
-          return { ok: false, reason: "This club uses a collectible membership. Mint it first." };
+      refresh: async () => {
+        try {
+          const token = get().token;
+          const response = await fetch(worldUrl(), {
+            headers: token ? { authorization: `Bearer ${token}` } : {},
+          });
+          if (!response.ok) return;
+          const data = (await response.json()) as {
+            clubs: Club[];
+            proposals: Proposal[];
+            challenges: Challenge[];
+            posts: Post[];
+            contributions: Contribution[];
+            members: MemberRow[];
+            registry: string | null;
+            me: typeof emptyMe & { address: string | null };
+          };
+          set({
+            extras: data.clubs ?? [],
+            proposals: data.proposals ?? [],
+            challenges: data.challenges ?? [],
+            posts: data.posts ?? [],
+            contributions: data.contributions ?? [],
+            members: data.members ?? [],
+            registry: data.registry ?? null,
+            joined: data.me?.joined ?? [],
+            minted: data.me?.minted ?? [],
+            votes: data.me?.votes ?? {},
+            entered: data.me?.entered ?? [],
+            cheers: data.me?.cheers ?? [],
+            hidden: data.me?.hidden ?? [],
+            points: data.me?.points ?? 0,
+          });
+          if (token && data.me && !data.me.address) set({ wallet: null, token: null });
+        } catch {
+          set({ notice: "Clubs could not be loaded." });
         }
-        set({
-          joined: [...get().joined, club.ticker],
-          bumps: { ...get().bumps, [club.ticker]: (get().bumps[club.ticker] ?? 0) + 1 },
-          notice: `You joined ${club.name}.`,
-        });
-        return { ok: true };
       },
-      mintAndJoin: (ticker) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club) return { ok: false, reason: "Club not found." };
-        if (get().joined.includes(club.ticker)) return { ok: false, reason: "Already a member." };
-        const minted = get().minted.includes(club.ticker)
-          ? get().minted
-          : [...get().minted, club.ticker];
-        set({
-          minted,
-          joined: [...get().joined, club.ticker],
-          bumps: { ...get().bumps, [club.ticker]: (get().bumps[club.ticker] ?? 0) + 1 },
-          notice: `Membership collected. Welcome to ${club.name}.`,
-        });
-        return { ok: true };
-      },
-      createClub: (input) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const ticker = input.ticker.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5);
-        if (!ticker) return { ok: false, reason: "Ticker needs letters." };
-        if (!input.name.trim()) return { ok: false, reason: "Club name is required." };
-        if (input.description.trim().length < 12) {
-          return { ok: false, reason: "Describe the club in a sentence." };
-        }
-        const splitTotal = input.split.members + input.split.ops + input.split.founder;
-        if (splitTotal !== 100) return { ok: false, reason: "Revenue split must add up to 100." };
-        if (findClub(ticker, get().extras)) return { ok: false, reason: "That ticker already has a club." };
-        const club: Club = {
-          ticker,
-          name: input.name.trim(),
-          tagline: input.description.trim().slice(0, 42),
-          description: input.description.trim(),
-          rules: input.rules.trim() || "Be useful. No spam. No fake volume.",
-          membership: input.membership,
-          members: 1,
-          treasuryUsdc: 0,
-          treasuryStock: 0,
-          weeklyActivity: 1,
-          score: 100,
-          price: "—",
-          change: "New",
-          up: true,
-          points: [4, 5, 5, 6, 7, 7, 8, 9],
-          cover: input.cover,
-          founded: new Date().toISOString().slice(0, 10),
-          founder: get().wallet?.name ?? "you",
-          split: input.split,
-        };
-        set({
-          extras: [club, ...get().extras],
-          joined: [...get().joined, ticker],
-          notice: `${club.name} is live. You are the founding admin.`,
-        });
-        return { ok: true, ticker };
-      },
-      contribute: (ticker, amount) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club) return { ok: false, reason: "Club not found." };
-        if (!get().joined.includes(club.ticker)) return { ok: false, reason: "Join the club before contributing." };
-        if (!Number.isFinite(amount) || amount < 1) return { ok: false, reason: "Enter at least 1 USDC." };
-        if (amount > 1_000_000) return { ok: false, reason: "Demo cap is 1,000,000 USDC." };
-        const whole = Math.round(amount);
-        const row: Contribution = {
-          id: `tx-${Date.now()}`,
-          ticker: club.ticker,
-          amount: whole,
-          at: new Date().toISOString(),
-        };
-        set({
-          contributions: [row, ...get().contributions],
-          usdcAdd: { ...get().usdcAdd, [club.ticker]: (get().usdcAdd[club.ticker] ?? 0) + whole },
-          notice: `${whole.toLocaleString("en-US")} USDC simulated into ${club.ticker}.`,
-        });
-        return { ok: true };
-      },
-      vote: (id, choice) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        if (get().votes[id]) return { ok: false, reason: "You already voted on this proposal." };
-        const proposalTicker = id.split("-")[0]?.toUpperCase();
-        if (proposalTicker && !get().joined.includes(proposalTicker) && !id.startsWith("user-")) {
-          const club = findClub(proposalTicker, get().extras);
-          if (club && !get().joined.includes(club.ticker)) {
-            return { ok: false, reason: "Join the club to vote." };
+      connect: async (kind) => {
+        set({ busy: true, connectError: null });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          const nonce = (await post({ action: "nonce", address }, null)) as Result & { message?: string };
+          if (!nonce.ok) {
+            set({ connectError: nonce.reason, busy: false });
+            return;
           }
+          const signature = await signIn(provider, address, nonce.message ?? "");
+          const session = (await post({ action: "session", address, signature }, null)) as Result & { token?: string };
+          if (!session.ok || !session.token) {
+            set({ connectError: session.ok ? "No session came back." : session.reason, busy: false });
+            return;
+          }
+          set({
+            wallet: { address: address.toLowerCase(), name: `${address.slice(0, 6)}…${address.slice(-4)}` },
+            token: session.token,
+            providerKind: kind,
+            connectOpen: false,
+            busy: false,
+            notice: "Wallet signed in on Base.",
+          });
+          await get().refresh();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Wallet connection failed.";
+          set({ connectError: message, busy: false });
         }
-        set({ votes: { ...get().votes, [id]: choice }, notice: choice === "yes" ? "Voted yes." : "Voted no." });
-        return { ok: true };
       },
-      publish: (ticker, kind, body) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club) return { ok: false, reason: "Club not found." };
-        if (!get().joined.includes(club.ticker)) return { ok: false, reason: "Members only." };
-        const text = body.trim();
-        if (text.length < 4) return { ok: false, reason: "Write something first." };
-        const post: Post = {
-          id: `u-${Date.now()}`,
-          ticker: club.ticker,
-          author: get().wallet?.name ?? "you",
-          kind,
-          body: text,
-          likes: 0,
-        };
-        set({ posts: [post, ...get().posts], notice: "Posted to the club." });
-        return { ok: true };
+      disconnect: async () => {
+        const token = get().token;
+        if (token) await post({ action: "logout" }, token).catch(() => undefined);
+        set({ wallet: null, token: null, providerKind: null, ...emptyMe, notice: "Wallet disconnected." });
       },
-      hidePost: (id) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        set({ hidden: [...get().hidden, id], notice: "Post hidden." });
-        return { ok: true };
+      join: (ticker) => act(get, set, { action: "join", ticker }, "You joined the club."),
+      mintAndJoin: (ticker) => act(get, set, { action: "mint", ticker }, "Membership collected."),
+      createClub: (input) =>
+        act(
+          get,
+          set,
+          {
+            action: "createClub",
+            name: input.name,
+            ticker: input.ticker,
+            description: input.description,
+            rules: input.rules,
+            membership: input.membership,
+            cover: input.cover,
+            members: input.split.members,
+            ops: input.split.ops,
+            founder: input.split.founder,
+          },
+          "Club is live. You are the founding admin.",
+        ),
+      contribute: async (ticker, amount) => {
+        const whole = Math.round(amount);
+        const kind = get().providerKind;
+        if (!get().wallet || !kind) return { ok: false, reason: "Connect a wallet first." };
+        if (!get().registry) return { ok: false, reason: "Deploy the treasury contract before sending USDC." };
+        set({ busy: true });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          const txHash = await depositUsdc(provider, address, get().registry as `0x${string}`, ticker, whole);
+          return act(get, set, { action: "contribute", ticker, amount: whole, txHash }, "USDC is in the Base treasury.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The wallet rejected the transfer.";
+          set({ busy: false, notice: message });
+          return { ok: false, reason: message };
+        }
       },
-      enterChallenge: (id, ticker) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club || !get().joined.includes(club.ticker)) return { ok: false, reason: "Join the club to enter." };
-        if (get().entered.includes(id)) return { ok: false, reason: "You already entered." };
-        set({ entered: [...get().entered, id], notice: "You're in. One entry is enough." });
-        return { ok: true };
+      deploy: async () => {
+        const kind = get().providerKind;
+        if (!get().wallet || !kind) return { ok: false, reason: "Connect a wallet first." };
+        set({ busy: true });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          const txHash = await deployTreasury(provider, address);
+          return act(get, set, { action: "registry", txHash }, "Treasury contract is on Base.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Deploy was rejected.";
+          set({ busy: false, notice: message });
+          return { ok: false, reason: message };
+        }
       },
-      cheer: (ticker) => {
-        const blocked = requireWallet(get().wallet);
-        if (blocked) return blocked;
-        const club = findClub(ticker, get().extras);
-        if (!club) return { ok: false, reason: "Club not found." };
-        if (get().cheers.includes(club.ticker)) return { ok: false, reason: "One cheer per club." };
-        set({ cheers: [...get().cheers, club.ticker], notice: `You backed ${club.name}.` });
-        return { ok: true };
-      },
+      propose: (ticker, title, body, days) => act(get, set, { action: "propose", ticker, title, body, days }, "Proposal is open."),
+      vote: (id, choice) => act(get, set, { action: "vote", id, choice }, choice === "yes" ? "Voted yes." : "Voted no."),
+      challenge: (ticker, title, detail, reward) =>
+        act(get, set, { action: "challenge", ticker, title, detail, reward }, "Challenge is up."),
+      publish: (ticker, kind, body) => act(get, set, { action: "post", ticker, kind, body }, "Posted to the club."),
+      hidePost: (id) => act(get, set, { action: "hide", id }, "Post hidden."),
+      enterChallenge: (id) => act(get, set, { action: "enter", id }, "You're in. One entry is enough."),
+      cheer: (ticker) => act(get, set, { action: "cheer", ticker }, "You backed the club."),
     }),
     {
-      name: "stockclub-v1",
+      name: "stockclub-v2",
       skipHydration: true,
       partialize: (state) => ({
         wallet: state.wallet,
-        joined: state.joined,
-        minted: state.minted,
-        extras: state.extras,
-        bumps: state.bumps,
-        usdcAdd: state.usdcAdd,
-        stockAdd: state.stockAdd,
-        contributions: state.contributions,
-        votes: state.votes,
-        posts: state.posts,
-        hidden: state.hidden,
-        entered: state.entered,
-        cheers: state.cheers,
+        token: state.token,
+        providerKind: state.providerKind,
       }),
     },
   ),
 );
+
+async function act(
+  get: () => StockState,
+  set: (partial: Partial<StockState>) => void,
+  body: Record<string, unknown>,
+  notice: string,
+): Promise<Result> {
+  if (!get().token) return { ok: false, reason: "Connect a wallet first." };
+  set({ busy: true });
+  const result = await post(body, get().token);
+  if (!result.ok) {
+    set({ busy: false, notice: result.reason });
+    return result;
+  }
+  await get().refresh();
+  set({ busy: false, notice });
+  return result;
+}

@@ -33,7 +33,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const connectOpen = useStock((s) => s.connectOpen);
   const openConnect = useStock((s) => s.openConnect);
   const closeConnect = useStock((s) => s.closeConnect);
+  const connectError = useStock((s) => s.connectError);
+  const busy = useStock((s) => s.busy);
   const connect = useStock((s) => s.connect);
+  const refresh = useStock((s) => s.refresh);
   const disconnect = useStock((s) => s.disconnect);
   const notice = useStock((s) => s.notice);
   const setNotice = useStock((s) => s.setNotice);
@@ -44,8 +47,10 @@ export function Shell({ children }: { children: ReactNode }) {
   const [gear, setGear] = useState(false);
 
   useEffect(() => {
-    void useStock.persist.rehydrate();
-  }, []);
+    void Promise.resolve(useStock.persist.rehydrate()).then(() => refresh());
+    const id = window.setInterval(() => void refresh(), 20000);
+    return () => window.clearInterval(id);
+  }, [refresh]);
 
   useEffect(() => {
     if (!notice) return;
@@ -163,7 +168,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </form>
           <div className="top-actions">
             <span className="base-chip">
-              <span className="base-dot" /> Base
+              <span className="base-dot" /> Sepolia
             </span>
             {wallet ? (
               <button type="button" className="btn btn-white btn-slim" onClick={() => disconnect()}>
@@ -194,15 +199,16 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <p className="muted">
-              A demo session on Base. Nothing is signed and no real funds move.
+              Sign a message with your Base wallet. The signature proves the address. USDC only moves when you confirm a transfer.
             </p>
-            <button type="button" className="wallet-option" onClick={() => connect("browser")}>
+            {connectError ? <p className="form-error">{connectError}</p> : null}
+            <button type="button" className="wallet-option" disabled={busy} onClick={() => void connect("browser")}>
               <span>Browser wallet</span>
-              <small>Simulated injected wallet</small>
+              <small>MetaMask or any injected wallet on Base</small>
             </button>
-            <button type="button" className="wallet-option" onClick={() => connect("coinbase")}>
+            <button type="button" className="wallet-option" disabled={busy} onClick={() => void connect("coinbase")}>
               <span>Coinbase Wallet</span>
-              <small>Simulated Base wallet</small>
+              <small>The Coinbase extension, on Base</small>
             </button>
           </div>
         </div>

@@ -31,7 +31,7 @@ export function MarketTape() {
             ? "Quotes from Yahoo Finance."
             : "Live quotes did not load."}{" "}
         {market.tokensLive ? "Token NAV from Coinbase on Base." : market.status === "ready" ? "Token NAV unavailable." : ""}{" "}
-        Club balances stay simulated.
+        Club USDC is counted only after a confirmed Base transfer.
       </p>
     </>
   );
