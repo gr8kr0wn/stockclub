@@ -19,7 +19,7 @@ export type CreateInput = {
   discord?: string;
 };
 
-type Result = { ok: true; ticker?: string } | { ok: false; reason: string };
+type Result = { ok: true; ticker?: string; code?: string; message?: string } | { ok: false; reason: string };
 
 type StockState = {
   wallet: Wallet | null;
@@ -66,6 +66,7 @@ type StockState = {
   hidePost: (id: string) => Promise<Result>;
   enterChallenge: (id: string, ticker: string) => Promise<Result>;
   cheer: (ticker: string) => Promise<Result>;
+  telegramCode: (ticker: string) => Promise<Result>;
 };
 
 function worldUrl(): string {
@@ -265,6 +266,11 @@ export const useStock = create<StockState>()(
       hidePost: (id) => act(get, set, { action: "hide", id }, "Post hidden."),
       enterChallenge: (id) => act(get, set, { action: "enter", id }, "You're in. One entry is enough."),
       cheer: (ticker) => act(get, set, { action: "cheer", ticker }, "You backed the club."),
+      telegramCode: async (ticker) => {
+        const token = get().token;
+        if (!token) return { ok: false as const, reason: "Connect a wallet first." };
+        return post({ action: "telegramCode", ticker }, token);
+      },
     }),
     {
       name: "stockclub-v2",

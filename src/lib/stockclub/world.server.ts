@@ -6,7 +6,7 @@ import { shortAddr, type Challenge, type Club, type Contribution, type MemberRow
 
 const TRANSFER_TOPIC = keccak256(toBytes("Transfer(address,address,uint256)"));
 
-type Result = { ok: true; ticker?: string; token?: string; nonce?: string; message?: string } | { ok: false; reason: string };
+type Result = { ok: true; ticker?: string; token?: string; nonce?: string; message?: string; code?: string } | { ok: false; reason: string };
 
 export type World = {
   clubs: Club[];
@@ -481,6 +481,15 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     if (existing.length) return fail("One cheer per club.");
     await sql`insert into cheers (ticker, address) values (${ticker}, ${address})`;
     return { ok: true };
+  }
+
+  if (action === "telegramCode") {
+    const ticker = cleanTicker(body.ticker);
+    if (!ticker) return fail("Club not found.");
+    const { issueTelegramCode } = await import("./news.server");
+    const issued = await issueTelegramCode(ticker, address);
+    if ("error" in issued) return fail(issued.error);
+    return { ok: true, ticker, code: issued.code, message: issued.botUrl ?? "" };
   }
 
   return fail("Unknown action.");

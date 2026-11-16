@@ -125,7 +125,7 @@ export function ClubView({ ticker }: { ticker: string }) {
         </div>
       </header>
 
-      <StockField symbol={club.stockSymbol} ticker={club.ticker} linked={club.telegramLinked} />
+      <StockField symbol={club.stockSymbol} ticker={club.ticker} linked={club.telegramLinked} founder={founder} />
 
       <div className="tabs" role="tablist">
         {TABS.map((item) => (
@@ -455,7 +455,8 @@ function Socials({ club }: { club: NonNullable<ReturnType<typeof findClub>> }) {
   );
 }
 
-function StockField({ symbol, ticker, linked }: { symbol: string | null; ticker: string; linked: boolean }) {
+function StockField({ symbol, ticker, linked, founder }: { symbol: string | null; ticker: string; linked: boolean; founder: boolean }) {
+  const requestCode = useStock((s) => s.telegramCode);
   const [desk, setDesk] = useState<{
     price: string | null;
     change: string | null;
@@ -464,6 +465,9 @@ function StockField({ symbol, ticker, linked }: { symbol: string | null; ticker:
     news: { id: string; title: string; publisher: string; link: string }[];
     telegram: "off" | "waiting" | "linked";
   } | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [botUrl, setBotUrl] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!symbol) return;
@@ -506,13 +510,41 @@ function StockField({ symbol, ticker, linked }: { symbol: string | null; ticker:
           ))}
         </ul>
       ) : null}
-      <p className="muted">
-        {linked || desk?.telegram === "linked"
-          ? "New headlines are pushed to the Telegram group on their own, every 5 minutes. Nobody has to open the club. A gain and a loss both go."
-          : desk?.telegram === "waiting"
-            ? "The group is linked. Pushes start on their own within 5 minutes of the bot key being added."
-            : `Add the bot to the Telegram group and send /link ${ticker} once. After that, anything new about this stock is pushed there every 5 minutes.`}
-      </p>
+      {linked || desk?.telegram === "linked" ? (
+        <p className="muted">New headlines are pushed to the Telegram group on their own, every 5 minutes. A gain and a loss both go.</p>
+      ) : founder ? (
+        <div className="telegram-lock">
+          <p className="muted">Only you, the club creator, can connect a Telegram group. Get a code, send it to the bot, then add the bot to the group. The code lasts 10 minutes.</p>
+          <button
+            type="button"
+            className="btn btn-lime btn-slim"
+            onClick={() => {
+              void requestCode(ticker).then((result) => {
+                if (!result.ok || !result.code) {
+                  setCodeError(result.ok ? "No code came back." : result.reason);
+                  return;
+                }
+                setCode(result.code);
+                setBotUrl(result.message || null);
+                setCodeError(null);
+              });
+            }}
+          >
+            Get Telegram code
+          </button>
+          {code ? <p className="link-code">{code}</p> : null}
+          {botUrl ? (
+            <a className="text-link" href={botUrl} target="_blank" rel="noreferrer">
+              Open the bot and send this code
+            </a>
+          ) : code ? (
+            <p className="muted">Message the bot and send this code. It will ask if you open it without the code.</p>
+          ) : null}
+          {codeError ? <p className="form-error">{codeError}</p> : null}
+        </div>
+      ) : (
+        <p className="muted">Only the club creator can connect a Telegram group.</p>
+      )}
     </section>
   );
 }

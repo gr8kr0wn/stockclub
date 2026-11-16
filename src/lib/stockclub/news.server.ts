@@ -149,10 +149,73 @@ export async function loadDesk(symbol: string | null, ticker: string | null): Pr
   };
 }
 
-export async function linkTelegram(ticker: string, chatId: string): Promise<boolean> {
+export async function issueTelegramCode(ticker: string, founder: string): Promise<{ code: string; expiresAt: string; botUrl: string | null } | { error: string }> {
   const sql = await getSql();
-  const rows = await sql<{ ticker: string }>`select ticker from clubs where ticker = ${ticker}`;
-  if (!rows.length) return false;
-  await sql`update clubs set telegram_chat = ${chatId} where ticker = ${ticker}`;
-  return true;
+  const clubs = await sql<{ founder: string }>`select founder from clubs where ticker = ${ticker}`;
+  if (!clubs.length) return { error: "Club not found." };
+  if (clubs[0].founder !== founder) return { error: "Only the club creator can connect Telegram." };
+  const existing = await sql<{ code: string; expires_at: unknown }>`
+    select code, expires_at from telegram_codes
+    where ticker = ${ticker} and founder = ${founder} and used_at is null and expires_at > now()
+    order by expires_at desc
+    limit 1
+  `;
+  if (existing[0]) {
+    const code = existing[0].code;
+    return { code, expiresAt: new Date(String(existing[0].expires_at)).toISOString(), botUrl: await botLink(code) };
+  }
+  const expires = new Date(Date.now() + 10 * 60 * 1000);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    try {
+      await sql`
+        insert into telegram_codes (code, ticker, founder, expires_at)
+        values (${code}, ${ticker}, ${founder}, ${expires.toISOString()})
+      `;
+      return { code, expiresAt: expires.toISOString(), botUrl: await botLink(code) };
+    } catch {
+      // Another club drew the same 6 digits. Try again.
+    }
+  }
+  return { error: "Could not make a code. Try again." };
+}
+
+export async function verifyTelegramCode(code: string, telegramUserId: string): Promise<{ ok: true; ticker: string } | { ok: false; reason: string }> {
+  const sql = await getSql();
+  const rows = await sql<{ ticker: string; telegram_user: string | null; expires_at: unknown }>`
+    select ticker, telegram_user, expires_at from telegram_codes
+    where code = ${code} and used_at is null and expires_at > now()
+  `;
+  const row = rows[0];
+  if (!row) return { ok: false, reason: "That code is wrong or it expired. Get a new one from your club page. Codes last 10 minutes." };
+  if (row.telegram_user && row.telegram_user !== telegramUserId) {
+    return { ok: false, reason: "That code was already used by another Telegram account." };
+  }
+  await sql`update telegram_codes set telegram_user = ${telegramUserId} where code = ${code}`;
+  return { ok: true, ticker: row.ticker };
+}
+
+export async function linkVerifiedGroup(telegramUserId: string, chatId: string): Promise<{ ok: true; ticker: string } | { ok: false; reason: string }> {
+  const sql = await getSql();
+  const rows = await sql<{ code: string; ticker: string }>`
+    select code, ticker from telegram_codes
+    where telegram_user = ${telegramUserId} and used_at is null and expires_at > now()
+    order by expires_at desc
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return { ok: false, reason: "Only the club creator can connect a group. Get a code on StockClub, send it to this bot in private, then add the bot." };
+  await sql`update clubs set telegram_chat = ${chatId} where ticker = ${row.ticker}`;
+  await sql`update telegram_codes set used_at = now() where code = ${row.code}`;
+  return { ok: true, ticker: row.ticker };
+}
+
+async function botLink(code: string): Promise<string | null> {
+  const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
+  if (!token) return null;
+  const response = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+  const data = (await response.json()) as { ok?: boolean; result?: { username?: string } };
+  const username = data.result?.username;
+  if (!data.ok || !username) return null;
+  return `https://t.me/${username}?start=${code}`;
 }
