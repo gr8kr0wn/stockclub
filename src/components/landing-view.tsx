@@ -23,6 +23,7 @@ export function LandingView() {
         <nav>
           <a href="#how">How it works</a>
           <a href="#treasury">Treasury</a>
+          <Link to="/faq">Help</Link>
           <Link to="/home">Open app</Link>
         </nav>
         <Link to="/home" className="btn btn-lime btn-slim">

@@ -1669,3 +1669,61 @@ legend {
   }
 }
 
+.faq-layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.faq-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.faq-nav button {
+  text-align: left;
+  border: 1px solid var(--color-line);
+  background: var(--color-card);
+  color: var(--color-fg);
+  border-radius: 0.8rem;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.8rem;
+}
+
+.faq-nav button.is-active {
+  border-color: var(--color-lime);
+  color: var(--color-lime);
+}
+
+.faq-answer ol {
+  margin: 0.8rem 0 1rem;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.7rem;
+  color: var(--color-muted);
+}
+
+.faq-answer h2 {
+  margin: 0;
+}
+
+@media (max-width: 860px) {
+  .faq-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .faq-nav {
+    position: static;
+    flex-direction: row;
+    overflow: auto;
+  }
+
+  .faq-nav button {
+    white-space: nowrap;
+  }
+}
+

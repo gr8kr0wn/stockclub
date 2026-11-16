@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ClubsRouteImport } from './routes/clubs'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as ExploreRouteImport } from './routes/explore'
+import { Route as FaqRouteImport } from './routes/faq'
 import { Route as GovernanceRouteImport } from './routes/governance'
 import { Route as HomeRouteImport } from './routes/home'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
@@ -44,6 +45,11 @@ const CreateRoute = CreateRouteImport.update({
 const ExploreRoute = ExploreRouteImport.update({
   id: '/explore',
   path: '/explore',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GovernanceRoute = GovernanceRouteImport.update({
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/clubs': typeof ClubsRoute
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
+  '/faq': typeof FaqRoute
   '/governance': typeof GovernanceRoute
   '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/clubs': typeof ClubsRoute
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
+  '/faq': typeof FaqRoute
   '/governance': typeof GovernanceRoute
   '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/clubs': typeof ClubsRoute
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
+  '/faq': typeof FaqRoute
   '/governance': typeof GovernanceRoute
   '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/clubs'
     | '/create'
     | '/explore'
+    | '/faq'
     | '/governance'
     | '/home'
     | '/leaderboard'
@@ -187,6 +197,7 @@ export interface FileRouteTypes {
     | '/clubs'
     | '/create'
     | '/explore'
+    | '/faq'
     | '/governance'
     | '/home'
     | '/leaderboard'
@@ -205,6 +216,7 @@ export interface FileRouteTypes {
     | '/clubs'
     | '/create'
     | '/explore'
+    | '/faq'
     | '/governance'
     | '/home'
     | '/leaderboard'
@@ -224,6 +236,7 @@ export interface RootRouteChildren {
   ClubsRoute: typeof ClubsRoute
   CreateRoute: typeof CreateRoute
   ExploreRoute: typeof ExploreRoute
+  FaqRoute: typeof FaqRoute
   GovernanceRoute: typeof GovernanceRoute
   HomeRoute: typeof HomeRoute
   LeaderboardRoute: typeof LeaderboardRoute
@@ -266,6 +279,13 @@ declare module '@tanstack/react-router' {
       path: '/explore'
       fullPath: '/explore'
       preLoaderRoute: typeof ExploreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/governance': {
@@ -360,6 +380,7 @@ const rootRouteChildren: RootRouteChildren = {
   ClubsRoute: ClubsRoute,
   CreateRoute: CreateRoute,
   ExploreRoute: ExploreRoute,
+  FaqRoute: FaqRoute,
   GovernanceRoute: GovernanceRoute,
   HomeRoute: HomeRoute,
   LeaderboardRoute: LeaderboardRoute,

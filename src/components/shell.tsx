@@ -9,6 +9,7 @@ import {
   Scale,
   Search,
   Settings,
+  CircleHelp,
   Trophy,
   Users,
   X,
@@ -26,6 +27,7 @@ const NAV = [
   { to: "/governance", label: "Governance", icon: Scale },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { to: "/rewards", label: "Rewards", icon: Gift },
+  { to: "/faq", label: "Help", icon: CircleHelp },
 ] as const;
 
 export function Shell({ children }: { children: ReactNode }) {
