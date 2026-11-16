@@ -3,6 +3,7 @@ pragma solidity 0.8.38;
 
 interface IERC20 {
     function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function transfer(address to, uint256 value) external returns (bool);
 }
 
 /// Shared club vault and membership log on Base.
@@ -17,6 +18,9 @@ contract StockClub {
         uint32 yesVotes;
         uint32 noVotes;
         bool exists;
+        bool executed;
+        address recipient;
+        uint256 amount;
     }
 
     mapping(bytes32 => address) public founderOf;
@@ -33,6 +37,7 @@ contract StockClub {
     event Deposited(bytes32 indexed id, address indexed from, uint256 amount);
     event Proposed(bytes32 indexed id, uint256 indexed proposalId, address author);
     event Voted(bytes32 indexed id, uint256 indexed proposalId, address voter, bool yes);
+    event Executed(bytes32 indexed id, uint256 indexed proposalId, address to, uint256 amount);
 
     constructor(address usdc_) {
         usdc = usdc_;
@@ -85,7 +90,31 @@ contract StockClub {
             closesAt: closesAt,
             yesVotes: 0,
             noVotes: 0,
-            exists: true
+            exists: true,
+            executed: false,
+            recipient: address(0),
+            amount: 0
+        });
+        emit Proposed(id, proposalId, msg.sender);
+    }
+
+    /// A request to send club USDC. It does nothing until execute, and only if the vote passes.
+    function proposeSpend(bytes32 id, address recipient, uint256 amount, uint64 closesAt) external returns (uint256 proposalId) {
+        require(isMember[id][msg.sender], "member");
+        require(recipient != address(0), "to");
+        require(amount > 0 && amount <= usdcBalance[id], "amount");
+        require(closesAt > block.timestamp, "closed");
+        proposalId = proposalCount[id];
+        proposalCount[id] = proposalId + 1;
+        proposals[id][proposalId] = Proposal({
+            author: msg.sender,
+            closesAt: closesAt,
+            yesVotes: 0,
+            noVotes: 0,
+            exists: true,
+            executed: false,
+            recipient: recipient,
+            amount: amount
         });
         emit Proposed(id, proposalId, msg.sender);
     }
@@ -100,5 +129,22 @@ contract StockClub {
         if (yes) proposal.yesVotes += 1;
         else proposal.noVotes += 1;
         emit Voted(id, proposalId, msg.sender, yes);
+    }
+
+    /// Sends the USDC after the vote is closed, more than half the members voted, and yes won.
+    function execute(bytes32 id, uint256 proposalId) external {
+        Proposal storage proposal = proposals[id][proposalId];
+        require(proposal.exists, "missing");
+        require(!proposal.executed, "done");
+        require(proposal.recipient != address(0), "talk");
+        require(block.timestamp >= proposal.closesAt, "open");
+        uint256 castVotes = uint256(proposal.yesVotes) + uint256(proposal.noVotes);
+        require(castVotes * 2 > memberCount[id], "quorum");
+        require(proposal.yesVotes > proposal.noVotes, "lost");
+        require(proposal.amount > 0 && proposal.amount <= usdcBalance[id], "amount");
+        proposal.executed = true;
+        usdcBalance[id] -= proposal.amount;
+        require(IERC20(usdc).transfer(proposal.recipient, proposal.amount), "usdc");
+        emit Executed(id, proposalId, proposal.recipient, proposal.amount);
     }
 }

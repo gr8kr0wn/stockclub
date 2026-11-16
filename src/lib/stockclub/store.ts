@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Challenge, Club, Contribution, MemberRow, Membership, Post, Proposal, Split, Wallet } from "./model";
 import { CLUB_REGISTRY } from "./chain";
-import { connectAccount, deployTreasury, depositUsdc, signIn } from "./wallet";
+import { connectAccount, deployTreasury, depositUsdc, ensureMember, executeSpend, proposeSpend, signIn, voteSpend } from "./wallet";
 
 export type CreateInput = {
   name: string;
@@ -60,6 +60,8 @@ type StockState = {
   contribute: (ticker: string, amount: number) => Promise<Result>;
   deploy: () => Promise<Result>;
   propose: (ticker: string, title: string, body: string, days: number) => Promise<Result>;
+  proposeSpend: (ticker: string, title: string, body: string, days: number, amount: number, recipient: string) => Promise<Result>;
+  executeSpend: (id: string) => Promise<Result>;
   vote: (id: string, choice: "yes" | "no") => Promise<Result>;
   challenge: (ticker: string, title: string, detail: string, reward: string) => Promise<Result>;
   publish: (ticker: string, kind: Post["kind"], body: string) => Promise<Result>;
@@ -203,10 +205,31 @@ export const useStock = create<StockState>()(
         if (token) await post({ action: "logout" }, token).catch(() => undefined);
         set({ wallet: null, token: null, providerKind: null, ...emptyMe, notice: "Wallet disconnected." });
       },
-      join: (ticker) => act(get, set, { action: "join", ticker }, "You joined the club."),
-      mintAndJoin: (ticker) => act(get, set, { action: "mint", ticker }, "Membership collected."),
-      createClub: (input) =>
-        act(
+      join: async (ticker) => {
+        const ready = await syncMember(get, set, ticker);
+        if (!ready.ok) return ready;
+        return act(get, set, { action: "join", ticker }, "You joined the club.");
+      },
+      mintAndJoin: async (ticker) => {
+        const ready = await syncMember(get, set, ticker);
+        if (!ready.ok) return ready;
+        return act(get, set, { action: "mint", ticker }, "Membership collected.");
+      },
+      createClub: async (input) => {
+        const kind = get().providerKind;
+        const wallet = get().wallet;
+        if (!wallet || !kind) return { ok: false, reason: "Connect a wallet first." };
+        if (!get().registry) return { ok: false, reason: "The treasury contract is not on Base yet." };
+        set({ busy: true });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          await ensureMember(provider, address, get().registry as `0x${string}`, input.ticker, input.membership === "collectible", wallet.address);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The wallet rejected the club.";
+          set({ busy: false, notice: message });
+          return { ok: false, reason: message };
+        }
+        return act(
           get,
           set,
           {
@@ -227,7 +250,8 @@ export const useStock = create<StockState>()(
             founder: input.split.founder,
           },
           "Club is live. You are the founding admin.",
-        ),
+        );
+      },
       contribute: async (ticker, amount) => {
         const whole = Math.round(amount);
         const kind = get().providerKind;
@@ -259,7 +283,65 @@ export const useStock = create<StockState>()(
         }
       },
       propose: (ticker, title, body, days) => act(get, set, { action: "propose", ticker, title, body, days }, "Proposal is open."),
-      vote: (id, choice) => act(get, set, { action: "vote", id, choice }, choice === "yes" ? "Voted yes." : "Voted no."),
+      proposeSpend: async (ticker, title, body, days, amount, recipient) => {
+        const kind = get().providerKind;
+        const wallet = get().wallet;
+        const club = get().extras.find((item) => item.ticker === ticker);
+        if (!wallet || !kind || !club) return { ok: false, reason: "Connect a wallet first." };
+        if (!get().registry) return { ok: false, reason: "The treasury contract is not on Base yet." };
+        set({ busy: true });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          const registry = get().registry as `0x${string}`;
+          await ensureMember(provider, address, registry, ticker, club.membership === "collectible", club.founderAddress);
+          const closesAt = Math.floor(Date.now() / 1000) + days * 86_400;
+          const sent = await proposeSpend(provider, address, registry, ticker, recipient as `0x${string}`, Math.round(amount), closesAt);
+          return act(
+            get,
+            set,
+            { action: "proposeSpend", ticker, title, body, days, amount: Math.round(amount), recipient, chainId: sent.chainId, txHash: sent.hash },
+            "Payout vote is open. Nothing moves until it passes.",
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The wallet rejected the payout.";
+          set({ busy: false, notice: message });
+          return { ok: false, reason: message };
+        }
+      },
+      executeSpend: async (id) => {
+        const kind = get().providerKind;
+        const proposal = get().proposals.find((item) => item.id === id);
+        if (!get().wallet || !kind || !proposal || proposal.chainId == null) return { ok: false, reason: "That is not a payout." };
+        if (!get().registry) return { ok: false, reason: "The treasury contract is not on Base yet." };
+        set({ busy: true });
+        try {
+          const { provider, address } = await connectAccount(kind);
+          const txHash = await executeSpend(provider, address, get().registry as `0x${string}`, proposal.ticker, proposal.chainId);
+          return act(get, set, { action: "executeSpend", id, txHash }, "USDC left the treasury.");
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "The payout was rejected.";
+          set({ busy: false, notice: message });
+          return { ok: false, reason: message };
+        }
+      },
+      vote: async (id, choice) => {
+        const proposal = get().proposals.find((item) => item.id === id);
+        const kind = get().providerKind;
+        if (proposal?.chainId != null) {
+          if (!get().wallet || !kind || !get().registry) return { ok: false, reason: "Connect a wallet first." };
+          set({ busy: true });
+          try {
+            const { provider, address } = await connectAccount(kind);
+            const txHash = await voteSpend(provider, address, get().registry as `0x${string}`, proposal.ticker, proposal.chainId, choice === "yes");
+            return act(get, set, { action: "vote", id, choice, txHash }, choice === "yes" ? "Voted yes." : "Voted no.");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "The wallet rejected the vote.";
+            set({ busy: false, notice: message });
+            return { ok: false, reason: message };
+          }
+        }
+        return act(get, set, { action: "vote", id, choice }, choice === "yes" ? "Voted yes." : "Voted no.");
+      },
       challenge: (ticker, title, detail, reward) =>
         act(get, set, { action: "challenge", ticker, title, detail, reward }, "Challenge is up."),
       publish: (ticker, kind, body) => act(get, set, { action: "post", ticker, kind, body }, "Posted to the club."),
@@ -283,6 +365,24 @@ export const useStock = create<StockState>()(
     },
   ),
 );
+
+async function syncMember(get: () => StockState, set: (partial: Partial<StockState>) => void, ticker: string): Promise<Result> {
+  const kind = get().providerKind;
+  const wallet = get().wallet;
+  const club = get().extras.find((item) => item.ticker === ticker);
+  if (!wallet || !kind || !club) return { ok: false, reason: "Connect a wallet first." };
+  if (!get().registry) return { ok: false, reason: "The treasury contract is not on Base yet." };
+  set({ busy: true });
+  try {
+    const { provider, address } = await connectAccount(kind);
+    await ensureMember(provider, address, get().registry as `0x${string}`, ticker, club.membership === "collectible", club.founderAddress);
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The wallet rejected membership.";
+    set({ busy: false, notice: message });
+    return { ok: false, reason: message };
+  }
+}
 
 async function act(
   get: () => StockState,

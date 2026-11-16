@@ -48,6 +48,10 @@ export type Proposal = {
   yes: number;
   no: number;
   daysLeft: number;
+  recipient: string | null;
+  amount: number | null;
+  chainId: number | null;
+  executed: boolean;
 };
 
 export type Challenge = {

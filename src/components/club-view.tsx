@@ -45,6 +45,8 @@ export function ClubView({ ticker }: { ticker: string }) {
   const entered = useStock((s) => s.entered);
   const enterChallenge = useStock((s) => s.enterChallenge);
   const propose = useStock((s) => s.propose);
+  const proposeSpend = useStock((s) => s.proposeSpend);
+  const executePayout = useStock((s) => s.executeSpend);
   const postChallenge = useStock((s) => s.challenge);
   const deploy = useStock((s) => s.deploy);
   const [amount, setAmount] = useState("100");
@@ -52,6 +54,8 @@ export function ClubView({ ticker }: { ticker: string }) {
   const [kind, setKind] = useState<Post["kind"]>("update");
   const [proposalTitle, setProposalTitle] = useState("");
   const [proposalBody, setProposalBody] = useState("");
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutTo, setPayoutTo] = useState("");
   const [challengeTitle, setChallengeTitle] = useState("");
   const [challengeDetail, setChallengeDetail] = useState("");
   const [challengeReward, setChallengeReward] = useState("");
@@ -223,7 +227,7 @@ export function ClubView({ ticker }: { ticker: string }) {
             <h2>{club.name} treasury</h2>
             <p className="fine">
               {registry
-                ? "USDC is Base USDC. You approve it, then it is pulled into the club contract. A vote does not buy a stock."
+                ? "USDC sits in the club contract. A payout leaves only after a vote passes. A vote does not buy a stock."
                 : "The treasury contract is not on Base yet. Deploy it before any USDC can move. A vote does not buy a stock."}
             </p>
             <div className="stat-row">
@@ -352,10 +356,16 @@ export function ClubView({ ticker }: { ticker: string }) {
             onSubmit={(event) => {
               event.preventDefault();
               gate(async () => {
-                const result = await propose(club.ticker, proposalTitle, proposalBody, 3);
+                const amount = Number(payoutAmount);
+                const sending = payoutAmount.trim() !== "";
+                const result = sending
+                  ? await proposeSpend(club.ticker, proposalTitle, proposalBody, 3, amount, payoutTo.trim())
+                  : await propose(club.ticker, proposalTitle, proposalBody, 3);
                 if (result.ok) {
                   setProposalTitle("");
                   setProposalBody("");
+                  setPayoutAmount("");
+                  setPayoutTo("");
                 }
               });
             }}
@@ -369,10 +379,19 @@ export function ClubView({ ticker }: { ticker: string }) {
               Reason
               <textarea value={proposalBody} onChange={(event) => setProposalBody(event.target.value)} rows={3} />
             </label>
-            <button type="submit" className="btn btn-lime btn-slim">Open a 3-day vote</button>
+            <label>
+              USDC to send
+              <input value={payoutAmount} onChange={(event) => setPayoutAmount(event.target.value)} inputMode="numeric" placeholder="Leave empty if this vote should not move money" />
+            </label>
+            <label>
+              Send it to
+              <input value={payoutTo} onChange={(event) => setPayoutTo(event.target.value)} placeholder="0x wallet that receives it" />
+            </label>
+            <p className="muted">If you enter an amount, this is a request to send that USDC. More than half the members must vote, and yes has to beat no. Nothing moves until someone releases it after the 3 days.</p>
+            <button type="submit" className="btn btn-lime btn-slim">{payoutAmount.trim() ? "Open a 3-day payout vote" : "Open a 3-day vote"}</button>
           </form>
           {clubProposals.length === 0 ? (
-            <Empty title="No open proposals" body="Members can put a treasury intent to a vote. A yes does not buy an asset." />
+            <Empty title="No open proposals" body="Members can ask the club to send USDC. A yes does not buy a stock, and the money stays put until the vote passes and someone releases it." />
           ) : null}
           {clubProposals.map((proposal) => {
             const choice = votes[proposal.id];
@@ -386,6 +405,13 @@ export function ClubView({ ticker }: { ticker: string }) {
                 </p>
                 <h2>{proposal.title}</h2>
                 <p>{proposal.body}</p>
+                {proposal.amount ? (
+                  <p className="muted">
+                    {proposal.executed
+                      ? `Sent ${proposal.amount} USDC to ${proposal.recipient}.`
+                      : `Sends ${proposal.amount} USDC to ${proposal.recipient} if yes wins.`}
+                  </p>
+                ) : null}
                 <div className="vote-bar" aria-hidden="true">
                   <i style={{ width: `${total ? (yes / total) * 100 : 50}%` }} />
                 </div>
@@ -395,12 +421,17 @@ export function ClubView({ ticker }: { ticker: string }) {
                   <span>{proposal.daysLeft} days left</span>
                 </div>
                 <div className="hero-actions">
-                  <button type="button" className="btn btn-lime btn-slim" disabled={Boolean(choice)} onClick={() => gate(() => vote(proposal.id, "yes"))}>
+                  <button type="button" className="btn btn-lime btn-slim" disabled={Boolean(choice) || proposal.executed} onClick={() => gate(() => vote(proposal.id, "yes"))}>
                     {choice === "yes" ? "Voted yes" : "Yes"}
                   </button>
-                  <button type="button" className="btn btn-ghost btn-slim" disabled={Boolean(choice)} onClick={() => gate(() => vote(proposal.id, "no"))}>
+                  <button type="button" className="btn btn-ghost btn-slim" disabled={Boolean(choice) || proposal.executed} onClick={() => gate(() => vote(proposal.id, "no"))}>
                     {choice === "no" ? "Voted no" : "No"}
                   </button>
+                  {proposal.amount && proposal.daysLeft === 0 && !proposal.executed ? (
+                    <button type="button" className="btn btn-lime btn-slim" onClick={() => gate(() => executePayout(proposal.id))}>
+                      Release USDC
+                    </button>
+                  ) : null}
                 </div>
               </article>
             );

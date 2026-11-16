@@ -1,6 +1,6 @@
-import { getAddress, isAddress, keccak256, toBytes, verifyMessage } from "viem";
+import { decodeFunctionResult, encodeFunctionData, getAddress, isAddress, keccak256, toBytes, verifyMessage, type Hex } from "viem";
 import { getSql } from "@/lib/db";
-import { CLUB_DEPLOYED_BYTECODE } from "./club-bytecode";
+import { CLUB_ABI, CLUB_DEPLOYED_BYTECODE } from "./club-bytecode";
 import { BASE_RPC, BASE_USDC, CLUB_REGISTRY, signInMessage } from "./chain";
 import { shortAddr, type Challenge, type Club, type Contribution, type MemberRow, type Membership, type Post, type Proposal } from "./model";
 
@@ -100,8 +100,18 @@ export async function loadWorld(token: string | null): Promise<World> {
   const contributionRows = await sql<{ id: string; ticker: string; address: string; amount: number; created_at: unknown }>`
     select id, ticker, address, amount, created_at from contributions order by created_at desc
   `;
-  const proposalRows = await sql<{ id: string; ticker: string; title: string; body: string; closes_at: unknown }>`
-    select id, ticker, title, body, closes_at from proposals order by created_at desc
+  const proposalRows = await sql<{
+    id: string;
+    ticker: string;
+    title: string;
+    body: string;
+    closes_at: unknown;
+    recipient: string | null;
+    amount: number | null;
+    chain_id: number | null;
+    executed: boolean;
+  }>`
+    select id, ticker, title, body, closes_at, recipient, amount, chain_id, executed from proposals order by created_at desc
   `;
   const voteRows = await sql<{ proposal_id: string; address: string; choice: string }>`
     select proposal_id, address, choice from votes
@@ -166,6 +176,10 @@ export async function loadWorld(token: string | null): Promise<World> {
       yes: votes.filter((item) => item.choice === "yes").length,
       no: votes.filter((item) => item.choice === "no").length,
       daysLeft,
+      recipient: row.recipient,
+      amount: row.amount == null ? null : Number(row.amount),
+      chainId: row.chain_id == null ? null : Number(row.chain_id),
+      executed: Boolean(row.executed),
     };
   });
 
@@ -399,6 +413,61 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     return { ok: true };
   }
 
+  if (action === "proposeSpend") {
+    const ticker = cleanTicker(body.ticker);
+    const title = String(body.title ?? "").trim().slice(0, 80);
+    const text = String(body.body ?? "").trim().slice(0, 600);
+    const days = Number(body.days);
+    const amount = Number(body.amount);
+    const recipient = cleanAddress(body.recipient);
+    const chainId = Number(body.chainId);
+    const txHash = String(body.txHash ?? "").toLowerCase();
+    if (!ticker || !(await memberOf(ticker, address))) return fail("Join the club to propose.");
+    if (title.length < 4 || text.length < 8) return fail("A proposal needs a title and a reason.");
+    if (!Number.isInteger(days) || days < 1 || days > 14) return fail("Voting stays open between 1 and 14 days.");
+    if (!Number.isInteger(amount) || amount < 1) return fail("Enter how much USDC should move.");
+    if (!recipient) return fail("That recipient is not a wallet address.");
+    if (!Number.isInteger(chainId) || chainId < 0) return fail("Missing the payout id.");
+    if (!/^0x[0-9a-f]{64}$/.test(txHash)) return fail("Missing the Base transaction.");
+    const registry = CLUB_REGISTRY;
+    if (!registry) return fail("The treasury contract is not on Base yet.");
+    const seen = await sql<{ id: string }>`select id from proposals where chain_id = ${chainId} and ticker = ${ticker}`;
+    if (seen.length) return fail("That payout is already recorded.");
+    if (!(await receiptHasTopic(txHash, address, registry, keccak256(toBytes("Proposed(bytes32,uint256,address)")), chainId))) {
+      return fail("Base did not show that payout request.");
+    }
+    const onChain = await readSpend(ticker, chainId);
+    if (!onChain || onChain.recipient.toLowerCase() !== recipient || onChain.amount !== BigInt(amount) * 1_000_000n) {
+      return fail("The payout on Base does not match this request.");
+    }
+    const id = crypto.randomUUID();
+    const closes = new Date(Date.now() + days * 86_400_000).toISOString();
+    await sql`
+      insert into proposals (id, ticker, author, title, body, closes_at, recipient, amount, chain_id, executed)
+      values (${id}, ${ticker}, ${address}, ${title}, ${text}, ${closes}, ${recipient}, ${amount}, ${chainId}, false)
+    `;
+    return { ok: true };
+  }
+
+  if (action === "executeSpend") {
+    const id = String(body.id ?? "");
+    const txHash = String(body.txHash ?? "").toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(txHash)) return fail("Missing the Base transaction.");
+    const rows = await sql<{ ticker: string; chain_id: number | null; executed: boolean }>`
+      select ticker, chain_id, executed from proposals where id = ${id}
+    `;
+    const proposal = rows[0];
+    if (!proposal || proposal.chain_id == null) return fail("That is not a payout.");
+    if (proposal.executed) return fail("That USDC was already sent.");
+    const registry = CLUB_REGISTRY;
+    if (!registry) return fail("The treasury contract is not on Base yet.");
+    if (!(await receiptHasTopic(txHash, address, registry, keccak256(toBytes("Executed(bytes32,uint256,address,uint256)")), Number(proposal.chain_id)))) {
+      return fail("Base did not show the USDC leaving the treasury.");
+    }
+    await sql`update proposals set executed = true where id = ${id}`;
+    return { ok: true };
+  }
+
   if (action === "propose") {
     const ticker = cleanTicker(body.ticker);
     const title = String(body.title ?? "").trim().slice(0, 80);
@@ -429,6 +498,16 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     if (!(await memberOf(proposal.ticker, address))) return fail("Join the club to vote.");
     const existing = await sql<{ choice: string }>`select choice from votes where proposal_id = ${id} and address = ${address}`;
     if (existing.length) return fail("You already voted on this proposal.");
+    const spend = await sql<{ chain_id: number | null }>`select chain_id from proposals where id = ${id}`;
+    const chainId = spend[0]?.chain_id;
+    if (chainId != null) {
+      const txHash = String(body.txHash ?? "").toLowerCase();
+      const registry = CLUB_REGISTRY;
+      if (!registry || !/^0x[0-9a-f]{64}$/.test(txHash)) return fail("Missing the Base vote.");
+      if (!(await receiptHasTopic(txHash, address, registry, keccak256(toBytes("Voted(bytes32,uint256,address,bool)")), Number(chainId)))) {
+        return fail("Base did not show that vote.");
+      }
+    }
     await sql`insert into votes (proposal_id, address, choice) values (${id}, ${address}, ${choice})`;
     return { ok: true };
   }
@@ -503,6 +582,38 @@ export async function handleWorld(token: string | null, body: Record<string, unk
   }
 
   return fail("Unknown action.");
+}
+
+async function receiptHasTopic(txHash: string, from: string, registry: string, topic: string, chainId: number): Promise<boolean> {
+  const receipt = (await rpc("eth_getTransactionReceipt", [txHash])) as {
+    status?: string;
+    from?: string;
+    to?: string;
+    logs?: { topics?: string[] }[];
+  } | null;
+  if (!receipt || receipt.status !== "0x1") return false;
+  if (receipt.from?.toLowerCase() !== from) return false;
+  if (receipt.to?.toLowerCase() !== registry.toLowerCase()) return false;
+  const idTopic = `0x${BigInt(chainId).toString(16).padStart(64, "0")}`;
+  return (receipt.logs ?? []).some((log) => {
+    const topics = log.topics ?? [];
+    return topics[0]?.toLowerCase() === topic.toLowerCase() && topics[2]?.toLowerCase() === idTopic;
+  });
+}
+
+async function readSpend(ticker: string, chainId: number): Promise<{ recipient: string; amount: bigint } | null> {
+  if (!CLUB_REGISTRY) return null;
+  const data = encodeFunctionData({
+    abi: CLUB_ABI,
+    functionName: "proposals",
+    args: [keccak256(toBytes(ticker)), BigInt(chainId)],
+  });
+  const raw = (await rpc("eth_call", [{ to: CLUB_REGISTRY, data }, "latest"])) as Hex;
+  const decoded = decodeFunctionResult({ abi: CLUB_ABI, functionName: "proposals", data: raw });
+  const recipient = decoded[6];
+  const amount = decoded[7];
+  if (!recipient) return null;
+  return { recipient, amount };
 }
 
 async function receiptPays(txHash: string, from: string, registry: string, dollars: number): Promise<boolean> {
