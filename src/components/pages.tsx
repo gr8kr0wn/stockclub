@@ -239,6 +239,25 @@ export function CreateView() {
         </fieldset>
         <fieldset>
           <legend>Cover</legend>
+          <label className="upload">
+            Upload your own
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                void fitCover(file)
+                  .then((data) => {
+                    setCover(data);
+                    setError(null);
+                  })
+                  .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not use that image."));
+              }}
+            />
+          </label>
+          {cover.startsWith("data:") ? <img className="cover-preview" src={cover} alt="" /> : null}
           <div className="cover-pick">
             {COVERS.map((src) => (
               <button key={src} type="button" className={cover === src ? "is-active" : undefined} onClick={() => setCover(src)}>
@@ -254,6 +273,41 @@ export function CreateView() {
       </form>
     </div>
   );
+}
+
+function fitCover(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/")) {
+      reject(new Error("Choose a JPEG, PNG, or WebP image."));
+      return;
+    }
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      const scale = Math.min(1, 960 / Math.max(image.width, image.height));
+      const width = Math.max(1, Math.round(image.width * scale));
+      const height = Math.max(1, Math.round(image.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        reject(new Error("Could not read that image."));
+        return;
+      }
+      ctx.drawImage(image, 0, 0, width, height);
+      const data = canvas.toDataURL("image/jpeg", 0.82);
+      URL.revokeObjectURL(url);
+      if (data.length > 500_000) reject(new Error("That image is still too large. Try a smaller one."));
+      else resolve(data);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Could not read that image."));
+    };
+    image.src = url;
+  });
 }
 
 export function MyClubsView() {

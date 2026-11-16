@@ -240,6 +240,16 @@ export async function loadWorld(token: string | null): Promise<World> {
   };
 }
 
+function acceptableCover(cover: string): boolean {
+  if (cover.startsWith("/media/") && !cover.includes("..") && cover.length < 80) return true;
+  const prefix = "data:image/jpeg;base64,";
+  if (!cover.startsWith(prefix) || cover.length > 500_000) return false;
+  const body = cover.slice(prefix.length);
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) return false;
+  const bytes = Buffer.from(body, "base64");
+  return bytes.length > 32 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
 function cleanSocial(value: unknown): string | null {
   const text = String(value ?? "").trim().slice(0, 120);
   return text.length > 0 ? text : null;
@@ -326,7 +336,7 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     if (![members, ops, founder].every((n) => Number.isInteger(n) && n >= 0 && n <= 100) || members + ops + founder !== 100) {
       return fail("Revenue split must add up to 100.");
     }
-    if (!cover.startsWith("/media/")) return fail("Pick a cover.");
+    if (!acceptableCover(cover)) return fail("Pick a cover or upload an image.");
     const existing = await sql<{ ticker: string }>`select ticker from clubs where ticker = ${ticker}`;
     if (existing.length) return fail("That ticker already has a club.");
     await sql`
