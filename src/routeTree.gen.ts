@@ -18,7 +18,9 @@ import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as TreasuryRouteImport } from './routes/treasury'
 import { Route as ApiMarketRouteImport } from './routes/api/market'
+import { Route as ApiNewsRouteImport } from './routes/api/news'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
+import { Route as ApiTelegramRouteImport } from './routes/api/telegram'
 import { Route as ApiWorldRouteImport } from './routes/api/world'
 import { Route as ClubTickerRouteImport } from './routes/club.$ticker'
 
@@ -67,9 +69,19 @@ const ApiMarketRoute = ApiMarketRouteImport.update({
   path: '/api/market',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNewsRoute = ApiNewsRouteImport.update({
+  id: '/api/news',
+  path: '/api/news',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSearchRoute = ApiSearchRouteImport.update({
   id: '/api/search',
   path: '/api/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTelegramRoute = ApiTelegramRouteImport.update({
+  id: '/api/telegram',
+  path: '/api/telegram',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiWorldRoute = ApiWorldRouteImport.update({
@@ -93,7 +105,9 @@ export interface FileRoutesByFullPath {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
+  '/api/telegram': typeof ApiTelegramRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -107,7 +121,9 @@ export interface FileRoutesByTo {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
+  '/api/telegram': typeof ApiTelegramRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -122,7 +138,9 @@ export interface FileRoutesById {
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
   '/api/market': typeof ApiMarketRoute
+  '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
+  '/api/telegram': typeof ApiTelegramRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -138,7 +156,9 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/news'
     | '/api/search'
+    | '/api/telegram'
     | '/api/world'
     | '/club/$ticker'
   fileRoutesByTo: FileRoutesByTo
@@ -152,7 +172,9 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/news'
     | '/api/search'
+    | '/api/telegram'
     | '/api/world'
     | '/club/$ticker'
   id:
@@ -166,7 +188,9 @@ export interface FileRouteTypes {
     | '/rewards'
     | '/treasury'
     | '/api/market'
+    | '/api/news'
     | '/api/search'
+    | '/api/telegram'
     | '/api/world'
     | '/club/$ticker'
   fileRoutesById: FileRoutesById
@@ -181,7 +205,9 @@ export interface RootRouteChildren {
   RewardsRoute: typeof RewardsRoute
   TreasuryRoute: typeof TreasuryRoute
   ApiMarketRoute: typeof ApiMarketRoute
+  ApiNewsRoute: typeof ApiNewsRoute
   ApiSearchRoute: typeof ApiSearchRoute
+  ApiTelegramRoute: typeof ApiTelegramRoute
   ApiWorldRoute: typeof ApiWorldRoute
   ClubTickerRoute: typeof ClubTickerRoute
 }
@@ -251,11 +277,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMarketRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/news': {
+      id: '/api/news'
+      path: '/api/news'
+      fullPath: '/api/news'
+      preLoaderRoute: typeof ApiNewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/search': {
       id: '/api/search'
       path: '/api/search'
       fullPath: '/api/search'
       preLoaderRoute: typeof ApiSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/telegram': {
+      id: '/api/telegram'
+      path: '/api/telegram'
+      fullPath: '/api/telegram'
+      preLoaderRoute: typeof ApiTelegramRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/world': {
@@ -285,7 +325,9 @@ const rootRouteChildren: RootRouteChildren = {
   RewardsRoute: RewardsRoute,
   TreasuryRoute: TreasuryRoute,
   ApiMarketRoute: ApiMarketRoute,
+  ApiNewsRoute: ApiNewsRoute,
   ApiSearchRoute: ApiSearchRoute,
+  ApiTelegramRoute: ApiTelegramRoute,
   ApiWorldRoute: ApiWorldRoute,
   ClubTickerRoute: ClubTickerRoute,
 }

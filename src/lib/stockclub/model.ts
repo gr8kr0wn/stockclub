@@ -25,6 +25,10 @@ export type Club = {
   split: Split;
   stockSymbol: string | null;
   stockName: string | null;
+  telegram: string | null;
+  xHandle: string | null;
+  discord: string | null;
+  telegramLinked: boolean;
 };
 
 export type Post = {
@@ -97,6 +101,26 @@ export function compact(n: number): string {
     return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}K`;
   }
   return String(n);
+}
+
+export function socialHref(kind: "telegram" | "x" | "discord", raw: string | null): string | null {
+  const value = raw?.trim() ?? "";
+  if (!value) return null;
+  if (kind === "telegram") {
+    if (/^https:\/\/(t\.me|telegram\.me)\//i.test(value)) return value;
+    const handle = value.replace(/^@/, "");
+    if (/^[A-Za-z0-9_]{3,32}$/.test(handle)) return `https://t.me/${handle}`;
+  }
+  if (kind === "x") {
+    if (/^https:\/\/(x\.com|twitter\.com)\//i.test(value)) return value;
+    const handle = value.replace(/^@/, "");
+    if (/^[A-Za-z0-9_]{1,15}$/.test(handle)) return `https://x.com/${handle}`;
+  }
+  if (kind === "discord") {
+    if (/^https:\/\/(discord\.gg|discord\.com)\//i.test(value)) return value;
+    if (/^[A-Za-z0-9-]{2,40}$/.test(value)) return `https://discord.gg/${value}`;
+  }
+  return null;
 }
 
 export function tickerFromSymbol(symbol: string): string {

@@ -320,6 +320,44 @@
   color: var(--color-lime);
 }
 
+.socials {
+  display: flex;
+  gap: 0.8rem;
+  margin: 0.2rem 0 0.6rem;
+}
+
+.socials a {
+  color: var(--color-fg);
+  text-decoration: underline;
+  text-underline-offset: 0.2rem;
+}
+
+.stock-field .section-head strong.down {
+  color: #ff5d5d;
+}
+
+.stock-field .section-head strong.up {
+  color: var(--color-lime);
+}
+
+.news-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.news-list a {
+  color: var(--color-fg);
+}
+
+.news-list small {
+  display: block;
+  color: var(--color-muted);
+}
+
 .quote {
   text-decoration: none;
   color: inherit;

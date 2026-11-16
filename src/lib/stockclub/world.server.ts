@@ -88,8 +88,12 @@ export async function loadWorld(token: string | null): Promise<World> {
     founder_split: number;
     stock_symbol: string | null;
     stock_name: string | null;
+    telegram: string | null;
+    x_handle: string | null;
+    discord: string | null;
+    telegram_chat: string | null;
     created_at: unknown;
-  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, created_at from clubs order by created_at desc`;
+  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, telegram_chat, created_at from clubs order by created_at desc`;
   const memberRows = await sql<{ ticker: string; address: string; minted: boolean }>`
     select ticker, address, minted from members order by created_at
   `;
@@ -143,6 +147,10 @@ export async function loadWorld(token: string | null): Promise<World> {
       split: { members: row.members_split, ops: row.ops_split, founder: row.founder_split },
       stockSymbol: row.stock_symbol,
       stockName: row.stock_name,
+      telegram: row.telegram,
+      xHandle: row.x_handle,
+      discord: row.discord,
+      telegramLinked: Boolean(row.telegram_chat),
     };
   });
 
@@ -232,6 +240,11 @@ export async function loadWorld(token: string | null): Promise<World> {
   };
 }
 
+function cleanSocial(value: unknown): string | null {
+  const text = String(value ?? "").trim().slice(0, 120);
+  return text.length > 0 ? text : null;
+}
+
 async function memberOf(ticker: string, address: string): Promise<boolean> {
   const sql = await getSql();
   const rows = await sql<{ ticker: string }>`select ticker from members where ticker = ${ticker} and address = ${address}`;
@@ -297,6 +310,9 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const cover = String(body.cover ?? "");
     const stockSymbol = String(body.stockSymbol ?? "").trim().slice(0, 24);
     const stockName = String(body.stockName ?? "").trim().slice(0, 80);
+    const telegram = cleanSocial(body.telegram);
+    const xHandle = cleanSocial(body.x);
+    const discord = cleanSocial(body.discord);
     if (!ticker) return fail("Ticker needs letters.");
     if (!name && !stockName) return fail("Club name is required.");
     const clubName = name || stockName;
@@ -314,8 +330,8 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const existing = await sql<{ ticker: string }>`select ticker from clubs where ticker = ${ticker}`;
     if (existing.length) return fail("That ticker already has a club.");
     await sql`
-      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name)
-      values (${ticker}, ${clubName}, ${about}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder}, ${stockSymbol || null}, ${stockName || null})
+      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord)
+      values (${ticker}, ${clubName}, ${about}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder}, ${stockSymbol || null}, ${stockName || null}, ${telegram}, ${xHandle}, ${discord})
     `;
     await sql`
       insert into members (ticker, address, minted) values (${ticker}, ${address}, ${membership === "collectible"})

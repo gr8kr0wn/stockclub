@@ -68,6 +68,9 @@ export function CreateView() {
   const [ticker, setTicker] = useState("");
   const [description, setDescription] = useState("");
   const [rules, setRules] = useState("");
+  const [telegram, setTelegram] = useState("");
+  const [xHandle, setX] = useState("");
+  const [discord, setDiscord] = useState("");
   const [membership, setMembership] = useState<Membership>("free");
   const [members, setMembers] = useState(70);
   const [ops, setOps] = useState(20);
@@ -140,6 +143,9 @@ export function CreateView() {
             cover,
             stockSymbol: paired?.symbol,
             stockName: paired?.name,
+            telegram,
+            x: xHandle,
+            discord,
           });
           if (!result.ok) {
             setError(result.reason);
@@ -188,6 +194,21 @@ export function CreateView() {
           Community rules
           <textarea value={rules} onChange={(event) => setRules(event.target.value)} rows={3} placeholder="No spam. Cite sources. Be sharp." />
         </label>
+        <fieldset>
+          <legend>Socials</legend>
+          <label>
+            Telegram
+            <input value={telegram} onChange={(event) => setTelegram(event.target.value)} placeholder="t.me/yourgroup or @handle" />
+          </label>
+          <label>
+            X
+            <input value={xHandle} onChange={(event) => setX(event.target.value)} placeholder="@yourclub" />
+          </label>
+          <label>
+            Discord
+            <input value={discord} onChange={(event) => setDiscord(event.target.value)} placeholder="discord.gg/invite" />
+          </label>
+        </fieldset>
         <fieldset>
           <legend>Membership</legend>
           <label className="check">

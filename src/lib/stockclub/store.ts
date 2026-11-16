@@ -14,6 +14,9 @@ export type CreateInput = {
   cover: string;
   stockSymbol?: string;
   stockName?: string;
+  telegram?: string;
+  x?: string;
+  discord?: string;
 };
 
 type Result = { ok: true; ticker?: string } | { ok: false; reason: string };
@@ -215,6 +218,9 @@ export const useStock = create<StockState>()(
             cover: input.cover,
             stockSymbol: input.stockSymbol ?? "",
             stockName: input.stockName ?? "",
+            telegram: input.telegram ?? "",
+            x: input.x ?? "",
+            discord: input.discord ?? "",
             members: input.split.members,
             ops: input.split.ops,
             founder: input.split.founder,

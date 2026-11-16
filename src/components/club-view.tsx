@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Empty, Mark } from "@/components/bits";
 import { TokenNote } from "@/components/market-bits";
 import {
@@ -8,6 +8,7 @@ import {
   membersOf,
   money,
   scoreOf,
+  socialHref,
   treasuryOf,
   type Post,
 } from "@/lib/stockclub/model";
@@ -102,6 +103,7 @@ export function ClubView({ ticker }: { ticker: string }) {
             <Mark ticker={club.ticker} /> {club.name}
           </h1>
           {club.stockSymbol ? <p className="paired">Paired with {club.stockSymbol}{club.stockName ? ` · ${club.stockName}` : ""}</p> : null}
+          <Socials club={club} />
           <p className="lede">{club.description}</p>
           <div className="club-hero-stats">
             <span><b>{compact(membersCount)}</b> members</span>
@@ -122,6 +124,8 @@ export function ClubView({ ticker }: { ticker: string }) {
           )}
         </div>
       </header>
+
+      <StockField symbol={club.stockSymbol} ticker={club.ticker} linked={club.telegramLinked} />
 
       <div className="tabs" role="tablist">
         {TABS.map((item) => (
@@ -430,5 +434,85 @@ function SplitMeter({ label, value }: { label: string; value: number }) {
         <i style={{ width: `${value}%` }} />
       </div>
     </div>
+  );
+}
+
+function Socials({ club }: { club: NonNullable<ReturnType<typeof findClub>> }) {
+  const links = [
+    ["Telegram", socialHref("telegram", club.telegram)],
+    ["X", socialHref("x", club.xHandle)],
+    ["Discord", socialHref("discord", club.discord)],
+  ].filter((item): item is [string, string] => Boolean(item[1]));
+  if (links.length === 0) return null;
+  return (
+    <p className="socials">
+      {links.map(([label, href]) => (
+        <a key={label} href={href} target="_blank" rel="noreferrer">
+          {label}
+        </a>
+      ))}
+    </p>
+  );
+}
+
+function StockField({ symbol, ticker, linked }: { symbol: string | null; ticker: string; linked: boolean }) {
+  const [desk, setDesk] = useState<{
+    price: string | null;
+    change: string | null;
+    loss: boolean;
+    up: boolean | null;
+    news: { id: string; title: string; publisher: string; link: string }[];
+    telegram: "off" | "waiting" | "linked";
+  } | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+    const prefix = window.location.pathname.match(/^\/hds-[a-z0-9]+-\d+-[a-z0-9]+/i)?.[0] ?? "";
+    const url = `${prefix}/api/news?symbol=${encodeURIComponent(symbol)}&ticker=${encodeURIComponent(ticker)}`;
+    let cancel = false;
+    void fetch(url)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancel) setDesk(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
+  }, [symbol, ticker]);
+
+  return (
+    <section className="panel stock-field">
+      <header className="section-head">
+        <h2>{symbol ? `${symbol} field` : "Stock field"}</h2>
+        {desk?.price ? (
+          <strong className={desk.loss ? "down" : "up"}>
+            {desk.loss ? "Loss" : "Gain"} {desk.price} {desk.change}
+          </strong>
+        ) : null}
+      </header>
+      {!symbol ? <p className="muted">Pair this club with a stock to see its move and news here.</p> : null}
+      {symbol && !desk ? <p className="muted">Loading the move and the news.</p> : null}
+      {desk && symbol && !desk.price && desk.news.length === 0 ? <p className="muted">No quote or news for {symbol} right now.</p> : null}
+      {desk && desk.news.length > 0 ? (
+        <ul className="news-list">
+          {desk.news.map((item) => (
+            <li key={item.id}>
+              <a href={item.link} target="_blank" rel="noreferrer">
+                {item.title}
+              </a>
+              <small>{item.publisher}</small>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="muted">
+        {linked || desk?.telegram === "linked"
+          ? "This club's Telegram group gets these headlines, including losses."
+          : desk?.telegram === "waiting"
+            ? "The group is linked. Headlines start when the bot key is added."
+            : `Add the bot to the club Telegram group and send /link ${ticker}. It will post this field there.`}
+      </p>
+    </section>
   );
 }
