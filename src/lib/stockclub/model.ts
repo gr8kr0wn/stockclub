@@ -22,6 +22,7 @@ export type Club = {
   founded: string;
   founder: string;
   founderAddress: string;
+  opsAddress: string | null;
   split: Split;
   stockSymbol: string | null;
   stockName: string | null;

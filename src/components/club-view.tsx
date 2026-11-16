@@ -47,6 +47,8 @@ export function ClubView({ ticker }: { ticker: string }) {
   const propose = useStock((s) => s.propose);
   const proposeSpend = useStock((s) => s.proposeSpend);
   const executePayout = useStock((s) => s.executeSpend);
+  const registerOnBase = useStock((s) => s.registerOnBase);
+  const claimShare = useStock((s) => s.claimShare);
   const postChallenge = useStock((s) => s.challenge);
   const deploy = useStock((s) => s.deploy);
   const [amount, setAmount] = useState("100");
@@ -227,7 +229,7 @@ export function ClubView({ ticker }: { ticker: string }) {
             <h2>{club.name} treasury</h2>
             <p className="fine">
               {registry
-                ? "USDC sits in the club contract. A payout leaves only after a vote passes. A vote does not buy a stock."
+                ? "USDC sits in the club contract. A passed vote can send it to one wallet, or split it by the percentages. The total drops when it is released. A vote does not buy a stock."
                 : "The treasury contract is not on Base yet. Deploy it before any USDC can move. A vote does not buy a stock."}
             </p>
             <div className="stat-row">
@@ -387,9 +389,19 @@ export function ClubView({ ticker }: { ticker: string }) {
               Send it to
               <input value={payoutTo} onChange={(event) => setPayoutTo(event.target.value)} placeholder="0x wallet that receives it" />
             </label>
-            <p className="muted">If you enter an amount, this is a request to send that USDC. More than half the members must vote, and yes has to beat no. Nothing moves until someone releases it after the 3 days.</p>
+            <p className="muted">Enter an amount. Add a wallet to send the whole amount there. Leave the wallet empty and the amount is split: members, ops, and founder. More than half the members must vote, and yes has to beat no. Members claim their share after it is released.</p>
             <button type="submit" className="btn btn-lime btn-slim">{payoutAmount.trim() ? "Open a 3-day payout vote" : "Open a 3-day vote"}</button>
           </form>
+          {wallet && (member || founder) ? (
+            <div className="hero-actions">
+              <button type="button" className="btn btn-ghost btn-slim" onClick={() => gate(() => registerOnBase(club.ticker))}>
+                Register on Base
+              </button>
+              <button type="button" className="btn btn-white btn-slim" onClick={() => gate(() => claimShare(club.ticker))}>
+                Claim my share
+              </button>
+            </div>
+          ) : null}
           {clubProposals.length === 0 ? (
             <Empty title="No open proposals" body="Members can ask the club to send USDC. A yes does not buy a stock, and the money stays put until the vote passes and someone releases it." />
           ) : null}
@@ -408,8 +420,12 @@ export function ClubView({ ticker }: { ticker: string }) {
                 {proposal.amount ? (
                   <p className="muted">
                     {proposal.executed
-                      ? `Sent ${proposal.amount} USDC to ${proposal.recipient}.`
-                      : `Sends ${proposal.amount} USDC to ${proposal.recipient} if yes wins.`}
+                      ? proposal.recipient
+                        ? `Sent ${proposal.amount} USDC to ${proposal.recipient}.`
+                        : `Split ${proposal.amount} USDC. Members can claim their share.`
+                      : proposal.recipient
+                        ? `Sends ${proposal.amount} USDC to ${proposal.recipient} if yes wins.`
+                        : `Splits ${proposal.amount} USDC across members, ops, and the founder if yes wins.`}
                   </p>
                 ) : null}
                 <div className="vote-bar" aria-hidden="true">

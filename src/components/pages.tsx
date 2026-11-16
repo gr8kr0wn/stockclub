@@ -75,6 +75,7 @@ export function CreateView() {
   const [members, setMembers] = useState(70);
   const [ops, setOps] = useState(20);
   const [founder, setFounder] = useState(10);
+  const [opsWallet, setOpsWallet] = useState("");
   const [cover, setCover] = useState(COVERS[0] ?? "/media/nvda.jpg");
   const [error, setError] = useState<string | null>(null);
   const [stockQuery, setStockQuery] = useState("");
@@ -146,6 +147,7 @@ export function CreateView() {
             telegram,
             x: xHandle,
             discord,
+            ops: opsWallet,
           });
           if (!result.ok) {
             setError(result.reason);
@@ -236,6 +238,10 @@ export function CreateView() {
               <input type="number" min={0} max={100} value={founder} onChange={(event) => setFounder(Number(event.target.value))} />
             </label>
           </div>
+          <label>
+            Ops wallet
+            <input value={opsWallet} onChange={(event) => setOpsWallet(event.target.value)} placeholder="Optional. Founder receives the ops share if empty." />
+          </label>
         </fieldset>
         <fieldset>
           <legend>Cover</legend>

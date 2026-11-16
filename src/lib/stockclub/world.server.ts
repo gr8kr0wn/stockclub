@@ -92,8 +92,9 @@ export async function loadWorld(token: string | null): Promise<World> {
     x_handle: string | null;
     discord: string | null;
     telegram_chat: string | null;
+    ops_address: string | null;
     created_at: unknown;
-  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, telegram_chat, created_at from clubs order by created_at desc`;
+  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, telegram_chat, ops_address, created_at from clubs order by created_at desc`;
   const memberRows = await sql<{ ticker: string; address: string; minted: boolean }>`
     select ticker, address, minted from members order by created_at
   `;
@@ -129,7 +130,11 @@ export async function loadWorld(token: string | null): Promise<World> {
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const mapped: Club[] = clubs.map((row) => {
     const members = memberRows.filter((item) => item.ticker === row.ticker).length;
-    const usdc = contributionRows.filter((item) => item.ticker === row.ticker).reduce((sum, item) => sum + Number(item.amount), 0);
+    const usdcIn = contributionRows.filter((item) => item.ticker === row.ticker).reduce((sum, item) => sum + Number(item.amount), 0);
+    const usdcOut = proposalRows
+      .filter((item) => item.ticker === row.ticker && item.executed && item.amount != null)
+      .reduce((sum, item) => sum + Number(item.amount), 0);
+    const usdc = Math.max(0, usdcIn - usdcOut);
     const posts = postRows.filter((item) => item.ticker === row.ticker && !item.hidden).length;
     const recent =
       contributionRows.filter((item) => item.ticker === row.ticker && Date.parse(iso(item.created_at)) > weekAgo).length +
@@ -154,6 +159,7 @@ export async function loadWorld(token: string | null): Promise<World> {
       founded: day(row.created_at),
       founder: shortAddr(row.founder),
       founderAddress: row.founder,
+      opsAddress: row.ops_address,
       split: { members: row.members_split, ops: row.ops_split, founder: row.founder_split },
       stockSymbol: row.stock_symbol,
       stockName: row.stock_name,
@@ -337,6 +343,7 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const telegram = cleanSocial(body.telegram);
     const xHandle = cleanSocial(body.x);
     const discord = cleanSocial(body.discord);
+    const opsAddress = cleanAddress(body.opsAddress);
     if (!ticker) return fail("Ticker needs letters.");
     if (!name && !stockName) return fail("Club name is required.");
     const clubName = name || stockName;
@@ -354,8 +361,8 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const existing = await sql<{ ticker: string }>`select ticker from clubs where ticker = ${ticker}`;
     if (existing.length) return fail("That ticker already has a club.");
     await sql`
-      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord)
-      values (${ticker}, ${clubName}, ${about}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder}, ${stockSymbol || null}, ${stockName || null}, ${telegram}, ${xHandle}, ${discord})
+      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, ops_address)
+      values (${ticker}, ${clubName}, ${about}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder}, ${stockSymbol || null}, ${stockName || null}, ${telegram}, ${xHandle}, ${discord}, ${opsAddress})
     `;
     await sql`
       insert into members (ticker, address, minted) values (${ticker}, ${address}, ${membership === "collectible"})
@@ -420,13 +427,14 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const days = Number(body.days);
     const amount = Number(body.amount);
     const recipient = cleanAddress(body.recipient);
+    const splitting = body.split === true;
     const chainId = Number(body.chainId);
     const txHash = String(body.txHash ?? "").toLowerCase();
     if (!ticker || !(await memberOf(ticker, address))) return fail("Join the club to propose.");
     if (title.length < 4 || text.length < 8) return fail("A proposal needs a title and a reason.");
     if (!Number.isInteger(days) || days < 1 || days > 14) return fail("Voting stays open between 1 and 14 days.");
     if (!Number.isInteger(amount) || amount < 1) return fail("Enter how much USDC should move.");
-    if (!recipient) return fail("That recipient is not a wallet address.");
+    if (!splitting && !recipient) return fail("That recipient is not a wallet address.");
     if (!Number.isInteger(chainId) || chainId < 0) return fail("Missing the payout id.");
     if (!/^0x[0-9a-f]{64}$/.test(txHash)) return fail("Missing the Base transaction.");
     const registry = CLUB_REGISTRY;
@@ -437,14 +445,17 @@ export async function handleWorld(token: string | null, body: Record<string, unk
       return fail("Base did not show that payout request.");
     }
     const onChain = await readSpend(ticker, chainId);
-    if (!onChain || onChain.recipient.toLowerCase() !== recipient || onChain.amount !== BigInt(amount) * 1_000_000n) {
+    if (!onChain || onChain.amount !== BigInt(amount) * 1_000_000n) return fail("The payout on Base does not match this request.");
+    if (splitting) {
+      if (!onChain.distribute) return fail("Base did not show a split.");
+    } else if (onChain.distribute || onChain.recipient.toLowerCase() !== recipient) {
       return fail("The payout on Base does not match this request.");
     }
     const id = crypto.randomUUID();
     const closes = new Date(Date.now() + days * 86_400_000).toISOString();
     await sql`
       insert into proposals (id, ticker, author, title, body, closes_at, recipient, amount, chain_id, executed)
-      values (${id}, ${ticker}, ${address}, ${title}, ${text}, ${closes}, ${recipient}, ${amount}, ${chainId}, false)
+      values (${id}, ${ticker}, ${address}, ${title}, ${text}, ${closes}, ${splitting ? null : recipient}, ${amount}, ${chainId}, false)
     `;
     return { ok: true };
   }
@@ -601,7 +612,7 @@ async function receiptHasTopic(txHash: string, from: string, registry: string, t
   });
 }
 
-async function readSpend(ticker: string, chainId: number): Promise<{ recipient: string; amount: bigint } | null> {
+async function readSpend(ticker: string, chainId: number): Promise<{ recipient: string; amount: bigint; distribute: boolean } | null> {
   if (!CLUB_REGISTRY) return null;
   const data = encodeFunctionData({
     abi: CLUB_ABI,
@@ -612,8 +623,9 @@ async function readSpend(ticker: string, chainId: number): Promise<{ recipient: 
   const decoded = decodeFunctionResult({ abi: CLUB_ABI, functionName: "proposals", data: raw });
   const recipient = decoded[6];
   const amount = decoded[7];
-  if (!recipient) return null;
-  return { recipient, amount };
+  const distribute = Boolean(decoded[8]);
+  if (amount == null) return null;
+  return { recipient, amount, distribute };
 }
 
 async function receiptPays(txHash: string, from: string, registry: string, dollars: number): Promise<boolean> {

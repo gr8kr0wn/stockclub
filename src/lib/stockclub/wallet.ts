@@ -127,7 +127,7 @@ function clubClient(provider: Provider, address: Address) {
 
 const reader = () => createPublicClient({ chain: baseSepolia, transport: http(BASE_RPC) });
 
-async function clubCall(provider: Provider, address: Address, registry: Address, functionName: "createClub" | "join" | "mint" | "proposeSpend" | "vote" | "execute", args: readonly unknown[]) {
+async function clubCall(provider: Provider, address: Address, registry: Address, functionName: "createClub" | "join" | "mint" | "proposeSpend" | "proposeSplit" | "vote" | "execute" | "claim", args: readonly unknown[]) {
   const data = encodeFunctionData({ abi: CLUB_ABI, functionName, args: args as never });
   const client = clubClient(provider, address);
   return client.sendTransaction({ account: address, chain: baseSepolia, to: registry, data });
@@ -141,6 +141,8 @@ export async function ensureMember(
   ticker: string,
   collectible: boolean,
   founder: string,
+  split: { members: number; ops: number; founder: number },
+  opsAddress: string | null,
 ): Promise<void> {
   const id = keccak256(toBytes(ticker));
   const onChainFounder = await reader().readContract({
@@ -153,7 +155,14 @@ export async function ensureMember(
     if (address.toLowerCase() !== founder.toLowerCase()) {
       throw new Error("The club creator has to open a payout before anyone else can.");
     }
-    const hash = await clubCall(provider, address, registry, "createClub", [ticker, collectible]);
+    const hash = await clubCall(provider, address, registry, "createClub", [
+      ticker,
+      collectible,
+      split.members,
+      split.ops,
+      split.founder,
+      (opsAddress || founder) as Address,
+    ]);
     await reader().waitForTransactionReceipt({ hash });
     return;
   }
@@ -184,6 +193,28 @@ export async function proposeSpend(
   const log = receipt.logs.find((item) => item.topics[0]?.toLowerCase() === topic.toLowerCase());
   if (!log?.topics[2]) throw new Error("Base did not return the payout id.");
   return { hash, chainId: Number(BigInt(log.topics[2])) };
+}
+
+export async function proposeSplit(
+  provider: Provider,
+  address: Address,
+  registry: Address,
+  ticker: string,
+  dollars: number,
+  closesAt: number,
+): Promise<{ hash: Hex; chainId: number }> {
+  const id = keccak256(toBytes(ticker));
+  const hash = await clubCall(provider, address, registry, "proposeSplit", [id, BigInt(dollars) * 1_000_000n, BigInt(closesAt)]);
+  const receipt = await reader().waitForTransactionReceipt({ hash });
+  const topic = keccak256(toBytes("Proposed(bytes32,uint256,address)"));
+  const log = receipt.logs.find((item) => item.topics[0]?.toLowerCase() === topic.toLowerCase());
+  if (!log?.topics[2]) throw new Error("Base did not return the payout id.");
+  return { hash, chainId: Number(BigInt(log.topics[2])) };
+}
+
+export async function claimShare(provider: Provider, address: Address, registry: Address, ticker: string): Promise<Hex> {
+  const id = keccak256(toBytes(ticker));
+  return clubCall(provider, address, registry, "claim", [id]);
 }
 
 export async function voteSpend(
