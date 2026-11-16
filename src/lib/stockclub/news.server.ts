@@ -154,6 +154,10 @@ export async function issueTelegramCode(ticker: string, founder: string): Promis
   const clubs = await sql<{ founder: string }>`select founder from clubs where ticker = ${ticker}`;
   if (!clubs.length) return { error: "Club not found." };
   if (clubs[0].founder !== founder) return { error: "Only the club creator can connect Telegram." };
+  await sql`
+    delete from telegram_codes
+    where ticker = ${ticker} and founder = ${founder} and used_at is null and expires_at <= now()
+  `;
   const existing = await sql<{ code: string; expires_at: unknown }>`
     select code, expires_at from telegram_codes
     where ticker = ${ticker} and founder = ${founder} and used_at is null and expires_at > now()

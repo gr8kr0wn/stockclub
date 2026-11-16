@@ -514,7 +514,7 @@ function StockField({ symbol, ticker, linked, founder }: { symbol: string | null
         <p className="muted">New headlines are pushed to the Telegram group on their own, every 5 minutes. A gain and a loss both go.</p>
       ) : founder ? (
         <div className="telegram-lock">
-          <p className="muted">Only you, the club creator, can connect a Telegram group. Get a code, send it to the bot, then add the bot to the group. The code lasts 10 minutes.</p>
+          <p className="muted">Only you, the club creator, can connect a Telegram group. Get a code, send it to the bot, then add the bot to the group. The code lasts 10 minutes. If it expires before you verify, request a new one.</p>
           <button
             type="button"
             className="btn btn-lime btn-slim"
@@ -524,13 +524,13 @@ function StockField({ symbol, ticker, linked, founder }: { symbol: string | null
                   setCodeError(result.ok ? "No code came back." : result.reason);
                   return;
                 }
-                setCode(result.code);
-                setBotUrl(result.message || null);
                 setCodeError(null);
+                setBotUrl(result.message || null);
+                setCode(result.code);
               });
             }}
           >
-            Get Telegram code
+            {code ? "Request a new code" : "Get Telegram code"}
           </button>
           {code ? <p className="link-code">{code}</p> : null}
           {botUrl ? (
