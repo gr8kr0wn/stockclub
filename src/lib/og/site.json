@@ -1,4 +1,7 @@
 {
   "title": "StockClub",
-  "card": "custom"
+  "description": "A club and a treasury for every stock. Members hold USDC together on Base.",
+  "url": "https://stockclub-eta.vercel.app",
+  "card": "custom",
+  "image": "/og.jpg"
 }

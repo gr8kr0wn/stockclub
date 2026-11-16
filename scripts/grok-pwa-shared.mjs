@@ -14,6 +14,8 @@ const SHARE_META_KEYS = new Set([
   "og:title",
   "og:description",
   "og:image",
+  "og:image:secure_url",
+  "og:image:type",
   "og:image:width",
   "og:image:height",
   "og:type",
@@ -376,6 +378,19 @@ export function grokOgHeadTags({
       tags.push(`<meta property="x:game:image" content="${escapeHtml(bannerUrl)}">`);
       tags.push(`<meta property="x:game:image:width" content="1200">`);
       tags.push(`<meta property="x:game:image:height" content="264">`);
+    }
+  } else {
+    const canonical = String(site.url ?? "").trim().replace(/\/$/, "");
+    const asset = resolveOgCardAsset(site, cwd);
+    if (/^https:\/\/[a-z0-9.-]+$/i.test(canonical) && asset.startsWith("/")) {
+      const image = `${canonical}${asset}`;
+      tags.push(`<meta property="og:url" content="${escapeHtml(canonical)}/">`);
+      tags.push(`<meta property="og:image" content="${escapeHtml(image)}">`);
+      tags.push(`<meta property="og:image:secure_url" content="${escapeHtml(image)}">`);
+      tags.push(`<meta property="og:image:type" content="image/jpeg">`);
+      tags.push(`<meta property="og:image:width" content="1200">`);
+      tags.push(`<meta property="og:image:height" content="630">`);
+      tags.push(`<meta name="twitter:image" content="${escapeHtml(image)}">`);
     }
   }
   return tags;
