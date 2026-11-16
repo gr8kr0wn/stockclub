@@ -27,7 +27,7 @@ export const Route = createFileRoute("/api/telegram")({
         const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
         if (token) {
           const note = linked
-            ? `${ticker} is linked. Every new headline for its stock is posted here within 5 minutes, up or down.`
+            ? `${ticker} is linked. New headlines are pushed here on their own every 5 minutes, up or down. Nobody has to ask.`
             : `${ticker} is not a club yet.`;
           await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
             method: "POST",

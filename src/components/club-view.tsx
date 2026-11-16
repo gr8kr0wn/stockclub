@@ -508,10 +508,10 @@ function StockField({ symbol, ticker, linked }: { symbol: string | null; ticker:
       ) : null}
       <p className="muted">
         {linked || desk?.telegram === "linked"
-          ? "Every new headline for this stock is posted to the Telegram group within 5 minutes. A gain and a loss both go."
+          ? "New headlines are pushed to the Telegram group on their own, every 5 minutes. Nobody has to open the club. A gain and a loss both go."
           : desk?.telegram === "waiting"
-            ? "The group is linked. Headlines start within 5 minutes of the bot key being added."
-            : `Add the bot to the club Telegram group and send /link ${ticker}. Anything new about this stock is posted there within 5 minutes.`}
+            ? "The group is linked. Pushes start on their own within 5 minutes of the bot key being added."
+            : `Add the bot to the Telegram group and send /link ${ticker} once. After that, anything new about this stock is pushed there every 5 minutes.`}
       </p>
     </section>
   );
