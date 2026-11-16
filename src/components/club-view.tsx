@@ -101,6 +101,7 @@ export function ClubView({ ticker }: { ticker: string }) {
           <h1>
             <Mark ticker={club.ticker} /> {club.name}
           </h1>
+          {club.stockSymbol ? <p className="paired">Paired with {club.stockSymbol}{club.stockName ? ` · ${club.stockName}` : ""}</p> : null}
           <p className="lede">{club.description}</p>
           <div className="club-hero-stats">
             <span><b>{compact(membersCount)}</b> members</span>

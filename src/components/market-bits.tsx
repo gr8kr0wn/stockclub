@@ -1,6 +1,14 @@
-import { shortAddr } from "@/lib/stockclub/model";
+import { shortAddr, allClubs, tickerFromSymbol } from "@/lib/stockclub/model";
 import { useMarket, type TokenizedStock } from "@/lib/stockclub/market";
+import { useStock } from "@/lib/stockclub/store";
 import { Sparkline } from "@/components/bits";
+
+const PAIR: Record<string, { symbol: string; name: string }> = {
+  "S&P 500": { symbol: "^GSPC", name: "S&P 500" },
+  AAPL: { symbol: "AAPL", name: "Apple" },
+  NVDA: { symbol: "NVDA", name: "NVIDIA" },
+  TSLA: { symbol: "TSLA", name: "Tesla" },
+};
 
 function navLabel(token: TokenizedStock): string {
   if (token.nav == null) return "NAV unavailable";
@@ -9,29 +17,39 @@ function navLabel(token: TokenizedStock): string {
 
 export function MarketTape() {
   const market = useMarket();
+  const extras = useStock((s) => s.extras);
+  const clubs = allClubs(extras);
   return (
     <>
       <section className="quote-row" aria-label="Market tape">
-        {market.quotes.map((quote) => (
-          <article key={quote.symbol} className="quote">
-            <div>
-              <strong>{quote.symbol}</strong>
-              <span>
-                {quote.price} <em className={quote.up ? "up" : "down"}>{quote.change}</em>
-              </span>
-            </div>
-            <Sparkline points={quote.points} up={quote.up} />
-          </article>
-        ))}
+        {market.quotes.map((quote) => {
+          const pair = PAIR[quote.symbol] ?? { symbol: quote.symbol, name: quote.symbol };
+          const existing = clubs.find(
+            (club) => club.stockSymbol?.toUpperCase() === pair.symbol.toUpperCase() || club.ticker === tickerFromSymbol(pair.symbol),
+          );
+          const href = existing
+            ? `/club/${existing.ticker.toLowerCase()}`
+            : `/create?symbol=${encodeURIComponent(pair.symbol)}&name=${encodeURIComponent(pair.name)}&type=Stock`;
+          return (
+            <a key={quote.symbol} className="quote" href={href}>
+              <div>
+                <strong>{quote.symbol}</strong>
+                <span>
+                  {quote.price} <em className={quote.up ? "up" : "down"}>{quote.change}</em>
+                </span>
+              </div>
+              <Sparkline points={quote.points} up={quote.up} />
+            </a>
+          );
+        })}
       </section>
       <p className="tape-note">
+        The four cards are only a sample. Search any stock, ETF, or index in the bar above, then create a club for it.{" "}
         {market.status === "loading"
-          ? "Loading live quotes. No access token is required."
+          ? "Loading live quotes."
           : market.quotesLive
             ? "Quotes from Yahoo Finance."
-            : "Live quotes did not load."}{" "}
-        {market.tokensLive ? "Token NAV from Coinbase on Base." : market.status === "ready" ? "Token NAV unavailable." : ""}{" "}
-        Club USDC is counted only after a confirmed Base transfer.
+            : "Live quotes did not load."}
       </p>
     </>
   );

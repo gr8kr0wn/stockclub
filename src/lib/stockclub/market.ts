@@ -40,10 +40,32 @@ export const EMPTY_MARKET: MarketSnapshot = {
   status: "loading",
 };
 
-function marketUrl(): string {
-  if (typeof window === "undefined") return "/api/market";
+function apiUrl(path: string): string {
+  if (typeof window === "undefined") return path;
   const prefix = window.location.pathname.match(/^\/hds-[a-z0-9]+-\d+-[a-z0-9]+/i)?.[0] ?? "";
-  return `${prefix}/api/market`;
+  return `${prefix}${path}`;
+}
+
+function marketUrl(): string {
+  return apiUrl("/api/market");
+}
+
+export type StockHit = {
+  symbol: string;
+  name: string;
+  type: string;
+  exchange: string;
+};
+
+export async function searchStocks(query: string): Promise<StockHit[]> {
+  const q = query.trim();
+  if (q.length < 1) return [];
+  const response = await fetch(`${apiUrl("/api/search")}?q=${encodeURIComponent(q)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) return [];
+  const data = (await response.json()) as { stocks?: StockHit[] };
+  return Array.isArray(data.stocks) ? data.stocks : [];
 }
 
 let pending: Promise<MarketSnapshot> | null = null;

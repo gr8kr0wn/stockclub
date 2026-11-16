@@ -86,8 +86,10 @@ export async function loadWorld(token: string | null): Promise<World> {
     members_split: number;
     ops_split: number;
     founder_split: number;
+    stock_symbol: string | null;
+    stock_name: string | null;
     created_at: unknown;
-  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, created_at from clubs order by created_at desc`;
+  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, created_at from clubs order by created_at desc`;
   const memberRows = await sql<{ ticker: string; address: string; minted: boolean }>`
     select ticker, address, minted from members order by created_at
   `;
@@ -139,6 +141,8 @@ export async function loadWorld(token: string | null): Promise<World> {
       founder: shortAddr(row.founder),
       founderAddress: row.founder,
       split: { members: row.members_split, ops: row.ops_split, founder: row.founder_split },
+      stockSymbol: row.stock_symbol,
+      stockName: row.stock_name,
     };
   });
 
@@ -291,9 +295,18 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const ops = Number(body.ops);
     const founder = Number(body.founder);
     const cover = String(body.cover ?? "");
+    const stockSymbol = String(body.stockSymbol ?? "").trim().slice(0, 24);
+    const stockName = String(body.stockName ?? "").trim().slice(0, 80);
     if (!ticker) return fail("Ticker needs letters.");
-    if (!name) return fail("Club name is required.");
-    if (description.length < 12) return fail("Describe the club in a sentence.");
+    if (!name && !stockName) return fail("Club name is required.");
+    const clubName = name || stockName;
+    let about = description;
+    if (about.length < 12) {
+      about = stockSymbol
+        ? `Community for ${stockName || stockSymbol} (${stockSymbol}).`
+        : about;
+    }
+    if (about.length < 12) return fail("Describe the club in a sentence, or pick a stock.");
     if (![members, ops, founder].every((n) => Number.isInteger(n) && n >= 0 && n <= 100) || members + ops + founder !== 100) {
       return fail("Revenue split must add up to 100.");
     }
@@ -301,8 +314,8 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const existing = await sql<{ ticker: string }>`select ticker from clubs where ticker = ${ticker}`;
     if (existing.length) return fail("That ticker already has a club.");
     await sql`
-      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split)
-      values (${ticker}, ${name}, ${description}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder})
+      insert into clubs (ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name)
+      values (${ticker}, ${clubName}, ${about}, ${rules}, ${membership}, ${address}, ${cover}, ${members}, ${ops}, ${founder}, ${stockSymbol || null}, ${stockName || null})
     `;
     await sql`
       insert into members (ticker, address, minted) values (${ticker}, ${address}, ${membership === "collectible"})

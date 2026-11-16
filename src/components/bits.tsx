@@ -58,6 +58,7 @@ export function ClubCard({ club }: { club: Club }) {
           <Link to="/club/$ticker" params={{ ticker: club.ticker.toLowerCase() }}>
             {club.name}
           </Link>
+          {club.stockSymbol ? <small className="paired-mini">{club.stockSymbol}</small> : null}
           {member ? <span className="dot-live" aria-label="Joined" /> : null}
         </div>
         <p className="muted">{club.tagline}</p>

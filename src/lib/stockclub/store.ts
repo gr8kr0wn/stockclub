@@ -12,6 +12,8 @@ export type CreateInput = {
   membership: Membership;
   split: Split;
   cover: string;
+  stockSymbol?: string;
+  stockName?: string;
 };
 
 type Result = { ok: true; ticker?: string } | { ok: false; reason: string };
@@ -211,6 +213,8 @@ export const useStock = create<StockState>()(
             rules: input.rules,
             membership: input.membership,
             cover: input.cover,
+            stockSymbol: input.stockSymbol ?? "",
+            stockName: input.stockName ?? "",
             members: input.split.members,
             ops: input.split.ops,
             founder: input.split.founder,

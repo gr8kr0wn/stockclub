@@ -14,7 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { allClubs, shortAddr } from "@/lib/stockclub/model";
+import { allClubs, shortAddr, tickerFromSymbol } from "@/lib/stockclub/model";
+import { searchStocks, type StockHit } from "@/lib/stockclub/market";
 import { useStock } from "@/lib/stockclub/store";
 
 const NAV = [
@@ -45,6 +46,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const extras = useStock((s) => s.extras);
   const [menu, setMenu] = useState(false);
   const [gear, setGear] = useState(false);
+  const [stocks, setStocks] = useState<StockHit[]>([]);
 
   useEffect(() => {
     void Promise.resolve(useStock.persist.rehydrate()).then(() => refresh());
@@ -67,10 +69,22 @@ export function Shell({ children }: { children: ReactNode }) {
     if (!q) return [];
     return allClubs(extras)
       .filter((club) =>
-        `${club.name} ${club.ticker} ${club.tagline}`.toLowerCase().includes(q),
+        `${club.name} ${club.ticker} ${club.tagline} ${club.stockSymbol ?? ""} ${club.stockName ?? ""}`.toLowerCase().includes(q),
       )
       .slice(0, 6);
   }, [extras, query]);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 1) {
+      setStocks([]);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      void searchStocks(q).then(setStocks).catch(() => setStocks([]));
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [query]);
 
   return (
     <div className="shell">
@@ -147,10 +161,10 @@ export function Shell({ children }: { children: ReactNode }) {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search for a stock club, ticker or community..."
-              aria-label="Search clubs"
+              placeholder="Search stocks, clubs, or a ticker..."
+              aria-label="Search stocks and clubs"
             />
-            {hits.length > 0 ? (
+            {hits.length > 0 || stocks.length > 0 ? (
               <div className="search-pop">
                 {hits.map((club) => (
                   <Link
@@ -161,8 +175,36 @@ export function Shell({ children }: { children: ReactNode }) {
                   >
                     <strong>{club.ticker}</strong>
                     <span>{club.name}</span>
+                    <small>Club</small>
                   </Link>
                 ))}
+                {stocks.map((hit) => {
+                  const existing = allClubs(extras).find(
+                    (club) => club.stockSymbol?.toUpperCase() === hit.symbol.toUpperCase() || club.ticker === tickerFromSymbol(hit.symbol),
+                  );
+                  if (existing) {
+                    return (
+                      <Link
+                        key={hit.symbol}
+                        to="/club/$ticker"
+                        params={{ ticker: existing.ticker.toLowerCase() }}
+                        onClick={() => setQuery("")}
+                      >
+                        <strong>{hit.symbol}</strong>
+                        <span>{hit.name}</span>
+                        <small>Club</small>
+                      </Link>
+                    );
+                  }
+                  const next = `/create?symbol=${encodeURIComponent(hit.symbol)}&name=${encodeURIComponent(hit.name)}&type=${encodeURIComponent(hit.type)}`;
+                  return (
+                    <a key={hit.symbol} href={next} onClick={() => setQuery("")}>
+                      <strong>{hit.symbol}</strong>
+                      <span>{hit.name}</span>
+                      <small>{hit.type} · Create</small>
+                    </a>
+                  );
+                })}
               </div>
             ) : null}
           </form>

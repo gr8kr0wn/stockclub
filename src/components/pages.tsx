@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ClubCard, Empty, Mark } from "@/components/bits";
 import { TokenNote } from "@/components/market-bits";
 import {
@@ -9,9 +9,11 @@ import {
   membersOf,
   money,
   scoreOf,
+  tickerFromSymbol,
   treasuryOf,
   type Membership,
 } from "@/lib/stockclub/model";
+import { searchStocks, type StockHit } from "@/lib/stockclub/market";
 import { useStock } from "@/lib/stockclub/store";
 
 export function ExploreView() {
@@ -23,7 +25,7 @@ export function ExploreView() {
   const clubs = allClubs(extras).filter((club) => {
     const q = query.trim().toLowerCase();
     if (!q) return true;
-    return `${club.name} ${club.ticker} ${club.tagline}`.toLowerCase().includes(q);
+    return `${club.name} ${club.ticker} ${club.tagline} ${club.stockSymbol ?? ""} ${club.stockName ?? ""}`.toLowerCase().includes(q);
   });
   const sorted = [...clubs].sort((a, b) => {
     if (filter === "newest") return b.founded.localeCompare(a.founded);
@@ -72,12 +74,53 @@ export function CreateView() {
   const [founder, setFounder] = useState(10);
   const [cover, setCover] = useState(COVERS[0] ?? "/media/nvda.jpg");
   const [error, setError] = useState<string | null>(null);
+  const [stockQuery, setStockQuery] = useState("");
+  const [stockHits, setStockHits] = useState<StockHit[]>([]);
+  const [paired, setPaired] = useState<StockHit | null>(null);
+
+  function pair(hit: StockHit) {
+    const next = tickerFromSymbol(hit.symbol);
+    setPaired(hit);
+    setStockQuery("");
+    setStockHits([]);
+    if (next) setTicker(next);
+    setName((current) => current.trim() ? current : hit.name);
+    setDescription((current) =>
+      current.trim().length >= 12 ? current : `Community for ${hit.name} (${hit.symbol}).`,
+    );
+  }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const symbol = params.get("symbol");
+    if (!symbol) return;
+    pair({
+      symbol,
+      name: params.get("name") || symbol,
+      type: params.get("type") || "Stock",
+      exchange: "",
+    });
+    // Prefill once from the link that opened this page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const q = stockQuery.trim();
+    if (q.length < 1) {
+      setStockHits([]);
+      return;
+    }
+    const id = window.setTimeout(() => {
+      void searchStocks(q).then(setStockHits).catch(() => setStockHits([]));
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [stockQuery]);
 
   return (
     <div className="page narrow">
       <header className="page-intro">
         <h1>Create a club</h1>
-        <p>You deploy the identity. You become the founding admin. The mark lives at /club/{ticker.toLowerCase() || "ticker"}.</p>
+        <p>Search any stock, ETF, or index and pair this club with it. The mark lives at /club/{ticker.toLowerCase() || "ticker"}.</p>
       </header>
       <form
         className="panel form"
@@ -95,6 +138,8 @@ export function CreateView() {
             membership,
             split: { members, ops, founder },
             cover,
+            stockSymbol: paired?.symbol,
+            stockName: paired?.name,
           });
           if (!result.ok) {
             setError(result.reason);
@@ -104,11 +149,31 @@ export function CreateView() {
         }}
       >
         <label>
+          Pair with a stock
+          <input
+            value={stockQuery}
+            onChange={(event) => setStockQuery(event.target.value)}
+            placeholder="Search Microsoft, VOO, Bitcoin..."
+          />
+        </label>
+        {stockHits.length > 0 ? (
+          <div className="stock-hits">
+            {stockHits.map((hit) => (
+              <button key={hit.symbol} type="button" onClick={() => pair(hit)}>
+                <strong>{hit.symbol}</strong>
+                <span>{hit.name}</span>
+                <small>{hit.type}{hit.exchange ? ` · ${hit.exchange}` : ""}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {paired ? <p className="paired">Paired with {paired.symbol} · {paired.name}</p> : null}
+        <label>
           Club name
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Club name" />
         </label>
         <label>
-          Stock ticker
+          Club ticker
           <input
             value={ticker}
             onChange={(event) => setTicker(event.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 5))}

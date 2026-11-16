@@ -23,6 +23,8 @@ export type Club = {
   founder: string;
   founderAddress: string;
   split: Split;
+  stockSymbol: string | null;
+  stockName: string | null;
 };
 
 export type Post = {
@@ -95,6 +97,12 @@ export function compact(n: number): string {
     return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}K`;
   }
   return String(n);
+}
+
+export function tickerFromSymbol(symbol: string): string {
+  const head = symbol.split(/[-.]/)[0]?.replace(/[^A-Za-z]/g, "") ?? "";
+  const letters = (head || symbol.replace(/[^A-Za-z]/g, "")).toUpperCase();
+  return letters.slice(0, 5);
 }
 
 export function shortAddr(address: string): string {
