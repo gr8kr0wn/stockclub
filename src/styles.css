@@ -267,27 +267,44 @@
   top: calc(100% + 0.4rem);
   left: 0;
   right: 0;
-  background: var(--color-card);
+  background: #101217;
   border: 1px solid var(--color-line);
   border-radius: 1rem;
   padding: 0.35rem;
-  z-index: 20;
+  z-index: 40;
   display: flex;
   flex-direction: column;
+  max-height: min(50vh, 22rem);
+  overflow: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
 
 .search-pop a {
-  display: flex;
-  gap: 0.7rem;
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.1rem 0.7rem;
   align-items: center;
   min-height: 2.75rem;
-  padding: 0 0.7rem;
+  padding: 0.45rem 0.7rem;
   border-radius: 0.7rem;
+}
+
+.search-pop a strong,
+.stock-hits button strong {
+  grid-row: 1 / span 2;
+}
+
+.search-pop a span,
+.stock-hits button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-pop a small,
 .stock-hits small {
-  margin-left: auto;
+  margin-left: 0;
   color: var(--color-muted);
   font-size: 0.75rem;
 }
@@ -299,12 +316,13 @@
 }
 
 .stock-hits button {
-  display: flex;
-  gap: 0.7rem;
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr);
+  gap: 0.1rem 0.7rem;
   align-items: center;
   text-align: left;
   min-height: 2.75rem;
-  padding: 0.4rem 0.7rem;
+  padding: 0.55rem 0.7rem;
   border-radius: 0.7rem;
   border: 1px solid var(--color-line);
   background: #10140e;
@@ -1356,6 +1374,15 @@ legend {
 
   .topbar {
     padding: 0.7rem 0.8rem 0.2rem;
+  }
+
+  .search-pop {
+    position: fixed;
+    top: 4.2rem;
+    left: 0.7rem;
+    right: 0.7rem;
+    width: auto;
+    z-index: 50;
   }
 
   .base-chip {
