@@ -19,7 +19,7 @@ import { searchStocks, type StockHit } from "@/lib/stockclub/market";
 import { useStock } from "@/lib/stockclub/store";
 
 const NAV = [
-  { to: "/", label: "Home", icon: House },
+  { to: "/home", label: "Home", icon: House },
   { to: "/explore", label: "Explore", icon: Compass },
   { to: "/clubs", label: "My Clubs", icon: Users },
   { to: "/treasury", label: "Treasury", icon: Landmark },
@@ -98,7 +98,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <div className="shell">
       <aside className={menu ? "sidebar is-open" : "sidebar"}>
         <div className="brand-row">
-          <Link to="/" className="brand">
+          <Link to="/home" className="brand">
             <span className="brand-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24">
                 <path d="M4 16h3V8H4v8zm6 0h3V4h-3v12zm6 0h3v-6h-3v6z" />
@@ -112,7 +112,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </div>
         <nav className="side-nav">
           {NAV.map((item) => {
-            const active = item.to === "/" ? path === "/" : path.startsWith(item.to);
+            const active = path === item.to || (item.to !== "/home" && path.startsWith(item.to));
             const Icon = item.icon;
             return (
               <Link key={item.to} to={item.to} className={active ? "nav-link is-active" : "nav-link"}>

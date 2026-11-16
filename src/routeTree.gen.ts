@@ -14,6 +14,7 @@ import { Route as ClubsRouteImport } from './routes/clubs'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as GovernanceRouteImport } from './routes/governance'
+import { Route as HomeRouteImport } from './routes/home'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as TreasuryRouteImport } from './routes/treasury'
@@ -48,6 +49,11 @@ const ExploreRoute = ExploreRouteImport.update({
 const GovernanceRoute = GovernanceRouteImport.update({
   id: '/governance',
   path: '/governance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HomeRoute = HomeRouteImport.update({
+  id: '/home',
+  path: '/home',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
   '/governance': typeof GovernanceRoute
+  '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
   '/governance': typeof GovernanceRoute
+  '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
@@ -142,6 +150,7 @@ export interface FileRoutesById {
   '/create': typeof CreateRoute
   '/explore': typeof ExploreRoute
   '/governance': typeof GovernanceRoute
+  '/home': typeof HomeRoute
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/explore'
     | '/governance'
+    | '/home'
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
@@ -178,6 +188,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/explore'
     | '/governance'
+    | '/home'
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
@@ -195,6 +206,7 @@ export interface FileRouteTypes {
     | '/create'
     | '/explore'
     | '/governance'
+    | '/home'
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
@@ -213,6 +225,7 @@ export interface RootRouteChildren {
   CreateRoute: typeof CreateRoute
   ExploreRoute: typeof ExploreRoute
   GovernanceRoute: typeof GovernanceRoute
+  HomeRoute: typeof HomeRoute
   LeaderboardRoute: typeof LeaderboardRoute
   RewardsRoute: typeof RewardsRoute
   TreasuryRoute: typeof TreasuryRoute
@@ -260,6 +273,13 @@ declare module '@tanstack/react-router' {
       path: '/governance'
       fullPath: '/governance'
       preLoaderRoute: typeof GovernanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/home': {
+      id: '/home'
+      path: '/home'
+      fullPath: '/home'
+      preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboard': {
@@ -341,6 +361,7 @@ const rootRouteChildren: RootRouteChildren = {
   CreateRoute: CreateRoute,
   ExploreRoute: ExploreRoute,
   GovernanceRoute: GovernanceRoute,
+  HomeRoute: HomeRoute,
   LeaderboardRoute: LeaderboardRoute,
   RewardsRoute: RewardsRoute,
   TreasuryRoute: TreasuryRoute,

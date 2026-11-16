@@ -1,13 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Shell } from "@/components/shell";
-import { HomeView } from "@/components/home-view";
+import { LandingView } from "@/components/landing-view";
 
-export const Route = createFileRoute("/")({ component: Home });
+export const Route = createFileRoute("/")({
+  component: Landing,
+  head: () => ({
+    meta: [
+      { title: "StockClub. A club and a treasury for every stock." },
+      {
+        name: "description",
+        content: "StockClub gives any ticker its own club and its own USDC treasury on Base. Money leaves only after a vote.",
+      },
+    ],
+  }),
+});
 
-function Home() {
-  return (
-    <Shell>
-      <HomeView />
-    </Shell>
-  );
+function Landing() {
+  return <LandingView />;
 }
