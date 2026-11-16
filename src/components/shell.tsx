@@ -51,7 +51,15 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(() => {
     void Promise.resolve(useStock.persist.rehydrate()).then(() => refresh());
     const id = window.setInterval(() => void refresh(), 20000);
-    return () => window.clearInterval(id);
+    const poll = window.setInterval(() => {
+      const prefix = window.location.pathname.match(/^\/hds-[a-z0-9]+-\d+-[a-z0-9]+/i)?.[0] ?? "";
+      void fetch(`${prefix}/api/telegram-poll`).catch(() => undefined);
+    }, 5 * 60 * 1000);
+    void fetch(`${window.location.pathname.match(/^\/hds-[a-z0-9]+-\d+-[a-z0-9]+/i)?.[0] ?? ""}/api/telegram-poll`).catch(() => undefined);
+    return () => {
+      window.clearInterval(id);
+      window.clearInterval(poll);
+    };
   }, [refresh]);
 
   useEffect(() => {

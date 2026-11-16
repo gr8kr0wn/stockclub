@@ -48,7 +48,7 @@ async function headlines(symbol: string): Promise<StockNews[]> {
   if (!response.ok) return [];
   const xml = await response.text();
   const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
-  return items.slice(0, 6).flatMap((item) => {
+  return items.slice(0, 12).flatMap((item) => {
     const title = decode(readTag(item, "title"));
     const link = readTag(item, "link");
     if (!title || !link) return [];
@@ -65,11 +65,11 @@ function readTag(xml: string, tag: string): string {
 
 function decode(value: string): string {
   return value
-    .replace(/&/g, "&")
-    .replace(/</g, "<")
-    .replace(/>/g, ">")
-    .replace(/"/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(new RegExp("&" + "amp;", "g"), "&")
+    .replace(new RegExp("&" + "lt;", "g"), "<")
+    .replace(new RegExp("&" + "gt;", "g"), ">")
+    .replace(new RegExp("&" + "quot;", "g"), '"')
+    .replace(new RegExp("&" + "#39;", "g"), "'");
 }
 
 async function sendTelegram(chat: string, text: string): Promise<boolean> {
@@ -83,25 +83,40 @@ async function sendTelegram(chat: string, text: string): Promise<boolean> {
   return response.ok;
 }
 
-async function fanout(ticker: string, chat: string | null, desk: { change: string | null; loss: boolean }, news: StockNews[]) {
+async function fanout(ticker: string, chat: string | null, change: string | null, news: StockNews[]): Promise<number> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
-  if (!token || !chat || news.length === 0) return;
+  if (!token || !chat || news.length === 0) return 0;
   const sql = await getSql();
   const seen = await sql<{ news_id: string }>`select news_id from news_sent where ticker = ${ticker}`;
   const known = new Set(seen.map((row) => row.news_id));
-  const fresh = news.filter((item) => item.id && !known.has(item.id));
-  if (known.size === 0) {
-    for (const item of fresh.slice(1)) {
-      await sql`insert into news_sent (ticker, news_id) values (${ticker}, ${item.id}) on conflict do nothing`;
-    }
+  const fresh = news.filter((item) => item.id && !known.has(item.id)).slice(0, 8);
+  let sent = 0;
+  for (const item of fresh) {
+    const move = change ? ` ${change}` : "";
+    const text = `${ticker}${move}\n${item.title}\n${item.publisher}\n${item.link}`;
+    const ok = await sendTelegram(chat, text);
+    if (!ok) continue;
+    await sql`insert into news_sent (ticker, news_id) values (${ticker}, ${item.id}) on conflict do nothing`;
+    sent += 1;
   }
-  const toSend = known.size === 0 ? fresh.slice(0, 1) : fresh.slice(0, 3);
-  const move = desk.loss ? `Loss ${desk.change ?? ""}`.trim() : `Move ${desk.change ?? ""}`.trim();
-  for (const item of toSend) {
-    const text = `${ticker} · ${move}\n${item.title}\n${item.link}`;
-    const ok = await sendTelegram(chat, text.trim());
-    if (ok) await sql`insert into news_sent (ticker, news_id) values (${ticker}, ${item.id}) on conflict do nothing`;
+  return sent;
+}
+
+export async function pollLinkedClubs(): Promise<{ clubs: number; sent: number }> {
+  const sql = await getSql();
+  const clubs = await sql<{ ticker: string; stock_symbol: string; telegram_chat: string }>`
+    select ticker, stock_symbol, telegram_chat from clubs
+    where telegram_chat is not null and stock_symbol is not null
+  `;
+  let sent = 0;
+  for (const club of clubs) {
+    const [move, news] = await Promise.all([
+      quote(club.stock_symbol).catch(() => null),
+      headlines(club.stock_symbol).catch(() => [] as StockNews[]),
+    ]);
+    sent += await fanout(club.ticker, club.telegram_chat, move?.change ?? null, news);
   }
+  return { clubs: clubs.length, sent };
 }
 
 export async function loadDesk(symbol: string | null, ticker: string | null): Promise<StockDesk> {
@@ -121,7 +136,7 @@ export async function loadDesk(symbol: string | null, ticker: string | null): Pr
     const chat = rows[0]?.telegram_chat ?? null;
     if (chat && process.env.TELEGRAM_BOT_TOKEN?.trim()) telegram = "linked";
     else if (chat) telegram = "waiting";
-    void fanout(ticker, chat, { change: move?.change ?? null, loss }, news).catch(() => undefined);
+    void fanout(ticker, chat, move?.change ?? null, news).catch(() => undefined);
   }
   return {
     symbol: clean,

@@ -21,6 +21,7 @@ import { Route as ApiMarketRouteImport } from './routes/api/market'
 import { Route as ApiNewsRouteImport } from './routes/api/news'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiTelegramRouteImport } from './routes/api/telegram'
+import { Route as ApiTelegramPollRouteImport } from './routes/api/telegram-poll'
 import { Route as ApiWorldRouteImport } from './routes/api/world'
 import { Route as ClubTickerRouteImport } from './routes/club.$ticker'
 
@@ -84,6 +85,11 @@ const ApiTelegramRoute = ApiTelegramRouteImport.update({
   path: '/api/telegram',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTelegramPollRoute = ApiTelegramPollRouteImport.update({
+  id: '/api/telegram-poll',
+  path: '/api/telegram-poll',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiWorldRoute = ApiWorldRouteImport.update({
   id: '/api/world',
   path: '/api/world',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
   '/api/telegram': typeof ApiTelegramRoute
+  '/api/telegram-poll': typeof ApiTelegramPollRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
   '/api/telegram': typeof ApiTelegramRoute
+  '/api/telegram-poll': typeof ApiTelegramPollRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
   '/api/telegram': typeof ApiTelegramRoute
+  '/api/telegram-poll': typeof ApiTelegramPollRoute
   '/api/world': typeof ApiWorldRoute
   '/club/$ticker': typeof ClubTickerRoute
 }
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/api/news'
     | '/api/search'
     | '/api/telegram'
+    | '/api/telegram-poll'
     | '/api/world'
     | '/club/$ticker'
   fileRoutesByTo: FileRoutesByTo
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/api/news'
     | '/api/search'
     | '/api/telegram'
+    | '/api/telegram-poll'
     | '/api/world'
     | '/club/$ticker'
   id:
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
     | '/api/news'
     | '/api/search'
     | '/api/telegram'
+    | '/api/telegram-poll'
     | '/api/world'
     | '/club/$ticker'
   fileRoutesById: FileRoutesById
@@ -208,6 +220,7 @@ export interface RootRouteChildren {
   ApiNewsRoute: typeof ApiNewsRoute
   ApiSearchRoute: typeof ApiSearchRoute
   ApiTelegramRoute: typeof ApiTelegramRoute
+  ApiTelegramPollRoute: typeof ApiTelegramPollRoute
   ApiWorldRoute: typeof ApiWorldRoute
   ClubTickerRoute: typeof ClubTickerRoute
 }
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTelegramRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/telegram-poll': {
+      id: '/api/telegram-poll'
+      path: '/api/telegram-poll'
+      fullPath: '/api/telegram-poll'
+      preLoaderRoute: typeof ApiTelegramPollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/world': {
       id: '/api/world'
       path: '/api/world'
@@ -328,6 +348,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNewsRoute: ApiNewsRoute,
   ApiSearchRoute: ApiSearchRoute,
   ApiTelegramRoute: ApiTelegramRoute,
+  ApiTelegramPollRoute: ApiTelegramPollRoute,
   ApiWorldRoute: ApiWorldRoute,
   ClubTickerRoute: ClubTickerRoute,
 }
