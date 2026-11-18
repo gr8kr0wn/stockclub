@@ -55,11 +55,13 @@ const TOPICS = [
   },
   {
     id: "telegram",
-    title: "Add the Telegram group",
+    title: "Add Telegram or Discord",
     body: [
-      "Only the person who created the club can do this. Open the club and press Get Telegram code.",
-      "The code lasts 10 minutes. Send it to the bot. If it expires before you verify, request a new one.",
-      "After the bot accepts the code, add that bot to your Telegram group. News for the club's stock is posted there. A group added by someone else is left.",
+      "Only the person who created the club can do this. Open the club and choose Add Telegram, Add Discord, or both.",
+      "Each code lasts 10 minutes. If it expires before you finish, request a new one.",
+      "Telegram: send the code to the bot in a private chat, then add the bot to the group.",
+      "Discord: invite the bot to the server, then type /link and the code in the channel you want.",
+      "After it links, news for the club's stock is posted there on its own. A group or channel added by someone else is not accepted.",
     ],
   },
 ] as const;

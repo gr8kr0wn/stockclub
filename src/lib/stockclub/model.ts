@@ -30,6 +30,7 @@ export type Club = {
   xHandle: string | null;
   discord: string | null;
   telegramLinked: boolean;
+  discordLinked: boolean;
 };
 
 export type Post = {

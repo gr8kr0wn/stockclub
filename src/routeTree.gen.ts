@@ -19,6 +19,7 @@ import { Route as HomeRouteImport } from './routes/home'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as RewardsRouteImport } from './routes/rewards'
 import { Route as TreasuryRouteImport } from './routes/treasury'
+import { Route as ApiDiscordRouteImport } from './routes/api/discord'
 import { Route as ApiMarketRouteImport } from './routes/api/market'
 import { Route as ApiNewsRouteImport } from './routes/api/news'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
@@ -77,6 +78,11 @@ const TreasuryRoute = TreasuryRouteImport.update({
   path: '/treasury',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiDiscordRoute = ApiDiscordRouteImport.update({
+  id: '/api/discord',
+  path: '/api/discord',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMarketRoute = ApiMarketRouteImport.update({
   id: '/api/market',
   path: '/api/market',
@@ -124,6 +130,7 @@ export interface FileRoutesByFullPath {
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
+  '/api/discord': typeof ApiDiscordRoute
   '/api/market': typeof ApiMarketRoute
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
@@ -143,6 +150,7 @@ export interface FileRoutesByTo {
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
+  '/api/discord': typeof ApiDiscordRoute
   '/api/market': typeof ApiMarketRoute
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/leaderboard': typeof LeaderboardRoute
   '/rewards': typeof RewardsRoute
   '/treasury': typeof TreasuryRoute
+  '/api/discord': typeof ApiDiscordRoute
   '/api/market': typeof ApiMarketRoute
   '/api/news': typeof ApiNewsRoute
   '/api/search': typeof ApiSearchRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
+    | '/api/discord'
     | '/api/market'
     | '/api/news'
     | '/api/search'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
+    | '/api/discord'
     | '/api/market'
     | '/api/news'
     | '/api/search'
@@ -222,6 +233,7 @@ export interface FileRouteTypes {
     | '/leaderboard'
     | '/rewards'
     | '/treasury'
+    | '/api/discord'
     | '/api/market'
     | '/api/news'
     | '/api/search'
@@ -242,6 +254,7 @@ export interface RootRouteChildren {
   LeaderboardRoute: typeof LeaderboardRoute
   RewardsRoute: typeof RewardsRoute
   TreasuryRoute: typeof TreasuryRoute
+  ApiDiscordRoute: typeof ApiDiscordRoute
   ApiMarketRoute: typeof ApiMarketRoute
   ApiNewsRoute: typeof ApiNewsRoute
   ApiSearchRoute: typeof ApiSearchRoute
@@ -323,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TreasuryRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/discord': {
+      id: '/api/discord'
+      path: '/api/discord'
+      fullPath: '/api/discord'
+      preLoaderRoute: typeof ApiDiscordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/market': {
       id: '/api/market'
       path: '/api/market'
@@ -386,6 +406,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaderboardRoute: LeaderboardRoute,
   RewardsRoute: RewardsRoute,
   TreasuryRoute: TreasuryRoute,
+  ApiDiscordRoute: ApiDiscordRoute,
   ApiMarketRoute: ApiMarketRoute,
   ApiNewsRoute: ApiNewsRoute,
   ApiSearchRoute: ApiSearchRoute,

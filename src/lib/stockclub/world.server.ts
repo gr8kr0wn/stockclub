@@ -92,9 +92,10 @@ export async function loadWorld(token: string | null): Promise<World> {
     x_handle: string | null;
     discord: string | null;
     telegram_chat: string | null;
+    discord_channel: string | null;
     ops_address: string | null;
     created_at: unknown;
-  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, telegram_chat, ops_address, created_at from clubs order by created_at desc`;
+  }>`select ticker, name, description, rules, membership, founder, cover, members_split, ops_split, founder_split, stock_symbol, stock_name, telegram, x_handle, discord, telegram_chat, discord_channel, ops_address, created_at from clubs order by created_at desc`;
   const memberRows = await sql<{ ticker: string; address: string; minted: boolean }>`
     select ticker, address, minted from members order by created_at
   `;
@@ -167,6 +168,7 @@ export async function loadWorld(token: string | null): Promise<World> {
       xHandle: row.x_handle,
       discord: row.discord,
       telegramLinked: Boolean(row.telegram_chat),
+      discordLinked: Boolean(row.discord_channel),
     };
   });
 
@@ -590,6 +592,15 @@ export async function handleWorld(token: string | null, body: Record<string, unk
     const issued = await issueTelegramCode(ticker, address);
     if ("error" in issued) return fail(issued.error);
     return { ok: true, ticker, code: issued.code, message: issued.botUrl ?? "" };
+  }
+
+  if (action === "discordCode") {
+    const ticker = cleanTicker(body.ticker);
+    if (!ticker) return fail("Club not found.");
+    const { issueDiscordCode } = await import("./news.server");
+    const issued = await issueDiscordCode(ticker, address);
+    if ("error" in issued) return fail(issued.error);
+    return { ok: true, ticker, code: issued.code, message: issued.inviteUrl ?? "" };
   }
 
   return fail("Unknown action.");

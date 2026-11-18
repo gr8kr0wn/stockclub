@@ -72,6 +72,7 @@ type StockState = {
   enterChallenge: (id: string, ticker: string) => Promise<Result>;
   cheer: (ticker: string) => Promise<Result>;
   telegramCode: (ticker: string) => Promise<Result>;
+  discordCode: (ticker: string) => Promise<Result>;
 };
 
 function worldUrl(): string {
@@ -395,6 +396,11 @@ export const useStock = create<StockState>()(
         const token = get().token;
         if (!token) return { ok: false as const, reason: "Connect a wallet first." };
         return post({ action: "telegramCode", ticker }, token);
+      },
+      discordCode: async (ticker) => {
+        const token = get().token;
+        if (!token) return { ok: false as const, reason: "Connect a wallet first." };
+        return post({ action: "discordCode", ticker }, token);
       },
     }),
     {

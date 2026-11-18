@@ -131,7 +131,7 @@ export function ClubView({ ticker }: { ticker: string }) {
         </div>
       </header>
 
-      <StockField symbol={club.stockSymbol} ticker={club.ticker} linked={club.telegramLinked} founder={founder} />
+      <StockField symbol={club.stockSymbol} ticker={club.ticker} telegramLinked={club.telegramLinked} discordLinked={club.discordLinked} founder={founder} />
 
       <div className="tabs" role="tablist">
         {TABS.map((item) => (
@@ -502,8 +502,21 @@ function Socials({ club }: { club: NonNullable<ReturnType<typeof findClub>> }) {
   );
 }
 
-function StockField({ symbol, ticker, linked, founder }: { symbol: string | null; ticker: string; linked: boolean; founder: boolean }) {
-  const requestCode = useStock((s) => s.telegramCode);
+function StockField({
+  symbol,
+  ticker,
+  telegramLinked,
+  discordLinked,
+  founder,
+}: {
+  symbol: string | null;
+  ticker: string;
+  telegramLinked: boolean;
+  discordLinked: boolean;
+  founder: boolean;
+}) {
+  const requestTelegram = useStock((s) => s.telegramCode);
+  const requestDiscord = useStock((s) => s.discordCode);
   const [desk, setDesk] = useState<{
     price: string | null;
     change: string | null;
@@ -511,10 +524,15 @@ function StockField({ symbol, ticker, linked, founder }: { symbol: string | null
     up: boolean | null;
     news: { id: string; title: string; publisher: string; link: string }[];
     telegram: "off" | "waiting" | "linked";
+    discord: "off" | "waiting" | "linked";
   } | null>(null);
-  const [code, setCode] = useState<string | null>(null);
-  const [botUrl, setBotUrl] = useState<string | null>(null);
+  const [telegramCode, setTelegramCode] = useState<string | null>(null);
+  const [telegramUrl, setTelegramUrl] = useState<string | null>(null);
+  const [discordCode, setDiscordCode] = useState<string | null>(null);
+  const [discordUrl, setDiscordUrl] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const telegramOn = telegramLinked || desk?.telegram === "linked";
+  const discordOn = discordLinked || desk?.discord === "linked";
 
   useEffect(() => {
     if (!symbol) return;
@@ -557,40 +575,76 @@ function StockField({ symbol, ticker, linked, founder }: { symbol: string | null
           ))}
         </ul>
       ) : null}
-      {linked || desk?.telegram === "linked" ? (
-        <p className="muted">New headlines are pushed to the Telegram group on their own, every 5 minutes. A gain and a loss both go.</p>
-      ) : founder ? (
+      {telegramOn || discordOn ? (
+        <p className="muted">
+          Headlines go to {telegramOn && discordOn ? "Telegram and Discord" : telegramOn ? "Telegram" : "Discord"} on their own. A gain and a loss both go.
+        </p>
+      ) : null}
+      {founder ? (
         <div className="telegram-lock">
-          <p className="muted">Only you, the club creator, can connect a Telegram group. Get a code, send it to the bot, then add the bot to the group. The code lasts 10 minutes. If it expires before you verify, request a new one.</p>
-          <button
-            type="button"
-            className="btn btn-lime btn-slim"
-            onClick={() => {
-              void requestCode(ticker).then((result) => {
-                if (!result.ok || !result.code) {
-                  setCodeError(result.ok ? "No code came back." : result.reason);
-                  return;
-                }
-                setCodeError(null);
-                setBotUrl(result.message || null);
-                setCode(result.code);
-              });
-            }}
-          >
-            {code ? "Request a new code" : "Get Telegram code"}
-          </button>
-          {code ? <p className="link-code">{code}</p> : null}
-          {botUrl ? (
-            <a className="text-link" href={botUrl} target="_blank" rel="noreferrer">
-              Open the bot and send this code
+          <p className="muted">You choose where news goes. Telegram, Discord, or both. Only the club creator can connect them. Each code lasts 10 minutes. If it expires, request a new one.</p>
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="btn btn-lime btn-slim"
+              onClick={() => {
+                void requestTelegram(ticker).then((result) => {
+                  if (!result.ok || !result.code) {
+                    setCodeError(result.ok ? "No code came back." : result.reason);
+                    return;
+                  }
+                  setCodeError(null);
+                  setTelegramUrl(result.message || null);
+                  setTelegramCode(result.code);
+                });
+              }}
+            >
+              {telegramCode ? "New Telegram code" : "Add Telegram"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-white btn-slim"
+              onClick={() => {
+                void requestDiscord(ticker).then((result) => {
+                  if (!result.ok || !result.code) {
+                    setCodeError(result.ok ? "No code came back." : result.reason);
+                    return;
+                  }
+                  setCodeError(null);
+                  setDiscordUrl(result.message || null);
+                  setDiscordCode(result.code);
+                });
+              }}
+            >
+              {discordCode ? "New Discord code" : "Add Discord"}
+            </button>
+          </div>
+          {telegramCode ? (
+            <p className="muted">
+              Telegram code <span className="link-code">{telegramCode}</span>. Send it to the bot in private, then add the bot to the group.
+            </p>
+          ) : null}
+          {telegramUrl ? (
+            <a className="text-link" href={telegramUrl} target="_blank" rel="noreferrer">
+              Open the Telegram bot
             </a>
-          ) : code ? (
-            <p className="muted">Message the bot and send this code. It will ask if you open it without the code.</p>
+          ) : null}
+          {discordCode ? (
+            <p className="muted">
+              Discord code <span className="link-code">{discordCode}</span>. Invite the bot, then type <strong>/link {discordCode}</strong> in the channel.
+            </p>
+          ) : null}
+          {discordUrl ? (
+            <a className="text-link" href={discordUrl} target="_blank" rel="noreferrer">
+              Invite the Discord bot
+            </a>
+          ) : discordCode ? (
+            <p className="muted">The Discord bot is not live yet. The code is saved. Add the bot token and it will accept /link.</p>
           ) : null}
           {codeError ? <p className="form-error">{codeError}</p> : null}
         </div>
       ) : (
-        <p className="muted">Only the club creator can connect a Telegram group.</p>
+        <p className="muted">Only the club creator can add Telegram or Discord.</p>
       )}
     </section>
   );
