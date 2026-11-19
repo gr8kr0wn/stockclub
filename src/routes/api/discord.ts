@@ -7,8 +7,7 @@ type Interaction = {
   channel_id?: string;
 };
 
-function verifyDiscord(body: string, signature: string, timestamp: string): boolean {
-  const keyHex = process.env.DISCORD_PUBLIC_KEY?.trim();
+function verifyDiscord(body: string, signature: string, timestamp: string, keyHex: string): boolean {
   if (!keyHex || !signature || !timestamp) return false;
   try {
     const key = createPublicKey({
@@ -29,7 +28,9 @@ export const Route = createFileRoute("/api/discord")({
         const raw = await request.text();
         const signature = request.headers.get("x-signature-ed25519") ?? "";
         const timestamp = request.headers.get("x-signature-timestamp") ?? "";
-        if (!verifyDiscord(raw, signature, timestamp)) return new Response("bad signature", { status: 401 });
+        const { discordPublicKey, linkDiscordChannel } = await import("@/lib/stockclub/news.server");
+        const key = (await discordPublicKey()) ?? process.env.DISCORD_PUBLIC_KEY?.trim() ?? "";
+        if (!verifyDiscord(raw, signature, timestamp, key)) return new Response("bad signature", { status: 401 });
         const interaction = JSON.parse(raw) as Interaction;
         if (interaction.type === 1) return Response.json({ type: 1 });
         if (interaction.type !== 2 || interaction.data?.name !== "link") {
@@ -40,8 +41,8 @@ export const Route = createFileRoute("/api/discord")({
         if (!/^[0-9]{6}$/.test(code) || !channel) {
           return Response.json({ type: 4, data: { content: "Send the 6 digit code from your club page.", flags: 64 } });
         }
-        const { linkDiscordChannel } = await import("@/lib/stockclub/news.server");
-        const linked = await linkDiscordChannel(code, channel);
+        const { linkDiscordChannel: link } = await import("@/lib/stockclub/news.server");
+        const linked = await link(code, channel);
         return Response.json({
           type: 4,
           data: {

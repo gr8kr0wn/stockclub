@@ -23,21 +23,45 @@ function money(n: number): string {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
-async function quote(symbol: string): Promise<{ price: string; change: string; up: boolean } | null> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+async function discordConfig(): Promise<{ token: string; publicKey: string; clientId: string } | null> {
+  const token = process.env.DISCORD_BOT_TOKEN?.trim();
+  const publicKey = process.env.DISCORD_PUBLIC_KEY?.trim();
+  const clientId = process.env.DISCORD_CLIENT_ID?.trim();
+  if (token && publicKey && clientId) return { token, publicKey, clientId };
+  const sql = await getSql();
+  const rows = await sql<{ discord_token: string | null; discord_public_key: string | null; discord_client_id: string | null }>`
+    select discord_token, discord_public_key, discord_client_id from bot_config where id = 1
+  `;
+  const row = rows[0];
+  if (!row?.discord_token || !row.discord_public_key) return null;
+  return {
+    token: token || row.discord_token,
+    publicKey: publicKey || row.discord_public_key,
+    clientId: clientId || row.discord_client_id || "1572602113102712842",
+  };
+}
+
+export async function discordPublicKey(): Promise<string | null> {
+  return (await discordConfig())?.publicKey ?? null;
+}
+
+export async function discordBotToken(): Promise<string | null> {
+  return (await discordConfig())?.token ?? null;
+}
+
+async function quote(symbol: string): Promise<{ price: string; raw: number; change: string; up: boolean } | null> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d`;
   const response = await fetch(url, {
     headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0" },
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok) return null;
   const json = (await response.json()) as {
-    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number; regularMarketChangePercent?: number } }> };
+    chart?: { result?: Array<{ meta?: { regularMarketPrice?: number } }> };
   };
-  const meta = json.chart?.result?.[0]?.meta;
-  if (typeof meta?.regularMarketPrice !== "number") return null;
-  const pct = typeof meta.regularMarketChangePercent === "number" ? meta.regularMarketChangePercent : 0;
-  const sign = pct > 0 ? "+" : "";
-  return { price: money(meta.regularMarketPrice), change: `${sign}${pct.toFixed(2)}%`, up: pct >= 0 };
+  const raw = json.chart?.result?.[0]?.meta?.regularMarketPrice;
+  if (typeof raw !== "number") return null;
+  return { price: money(raw), raw, change: "", up: true };
 }
 
 async function headlines(symbol: string): Promise<StockNews[]> {
@@ -73,46 +97,105 @@ function decode(value: string): string {
     .replace(new RegExp("&" + "#39;", "g"), "'");
 }
 
-async function sendTelegram(chat: string, text: string): Promise<boolean> {
+async function sendTelegram(chat: string, text: string, link: string): Promise<boolean> {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   if (!token) return false;
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
+    body: JSON.stringify({
+      chat_id: chat,
+      text: `${text}\n${link}`,
+      disable_web_page_preview: false,
+      link_preview_options: { is_disabled: false, url: link, prefer_large_media: true },
+    }),
   });
   return response.ok;
 }
 
-async function sendDiscord(channel: string, text: string): Promise<boolean> {
-  const token = process.env.DISCORD_BOT_TOKEN?.trim();
+async function previewImage(link: string): Promise<string | null> {
+  try {
+    const response = await fetch(link, {
+      headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+      signal: AbortSignal.timeout(6000),
+      redirect: "follow",
+    });
+    if (!response.ok) return null;
+    const html = await response.text();
+    const match = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function sendDiscord(channel: string, text: string, link: string, title: string): Promise<boolean> {
+  const token = (await discordBotToken()) ?? "";
   if (!token) return false;
+  const image = await previewImage(link);
   const response = await fetch(`https://discord.com/api/v10/channels/${channel}/messages`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bot ${token}` },
-    body: JSON.stringify({ content: text.slice(0, 2000) }),
+    body: JSON.stringify({
+      content: text.slice(0, 1800),
+      embeds: [{ title: title.slice(0, 250), url: link, description: link, image: image ? { url: image } : undefined }],
+    }),
   });
   return response.ok;
+}
+
+function formatSurge(current: number, previous: number): string | null {
+  if (!previous) return null;
+  const pct = ((current - previous) / previous) * 100;
+  if (Math.abs(pct) < 0.05) return null;
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(2)}% since last update`;
+}
+
+function filterNews(news: StockNews[], kind: string, surge: string | null): StockNews[] {
+  if (kind === "moves") return [];
+  if (kind === "gains" && surge && surge.startsWith("-")) return [];
+  if (kind === "losses" && surge && !surge.startsWith("-")) return [];
+  return news;
 }
 
 async function fanout(
   ticker: string,
+  symbol: string,
   chat: string | null,
   discord: string | null,
-  change: string | null,
+  surge: string | null,
   news: StockNews[],
+  kind: string,
 ): Promise<number> {
-  if ((!chat && !discord) || news.length === 0) return 0;
+  if (!chat && !discord) return 0;
   const sql = await getSql();
+  const wantNews = kind === "all" || kind === "headlines" || kind === "gains" || kind === "losses";
+  const wantMove = kind === "all" || kind === "moves" || kind === "gains" || kind === "losses";
+  let sent = 0;
+  if (wantMove && surge) {
+    const moveId = `move:${ticker}:${new Date().toISOString().slice(0, 16)}`;
+    const seenMove = await sql<{ news_id: string }>`select news_id from news_sent where ticker = ${ticker} and news_id = ${moveId}`;
+    if (!seenMove.length) {
+      const text = `${ticker} last move ${surge}`;
+      const quoteLink = `https://finance.yahoo.com/quote/${symbol}`;
+      const telegramOk = chat ? await sendTelegram(chat, text, quoteLink) : false;
+      const discordOk = discord ? await sendDiscord(discord, text, quoteLink, `${ticker} last move`) : false;
+      if (telegramOk || discordOk) {
+        await sql`insert into news_sent (ticker, news_id) values (${ticker}, ${moveId}) on conflict do nothing`;
+        sent += 1;
+      }
+    }
+  }
+  if (!wantNews || news.length === 0) return sent;
   const seen = await sql<{ news_id: string }>`select news_id from news_sent where ticker = ${ticker}`;
   const known = new Set(seen.map((row) => row.news_id));
-  const fresh = news.filter((item) => item.id && !known.has(item.id)).slice(0, 8);
-  let sent = 0;
+  const fresh = news.filter((item) => item.id && !known.has(item.id)).slice(0, 4);
   for (const item of fresh) {
-    const move = change ? ` ${change}` : "";
-    const text = `${ticker}${move}\n${item.title}\n${item.publisher}\n${item.link}`;
-    const telegramOk = chat ? await sendTelegram(chat, text) : false;
-    const discordOk = discord ? await sendDiscord(discord, text) : false;
+    const text = `${ticker}${surge ? ` ${surge}` : ""}\n${item.title}\n${item.publisher}`;
+    const telegramOk = chat ? await sendTelegram(chat, text, item.link) : false;
+    const discordOk = discord ? await sendDiscord(discord, text, item.link, item.title) : false;
     if (!telegramOk && !discordOk) continue;
     await sql`insert into news_sent (ticker, news_id) values (${ticker}, ${item.id}) on conflict do nothing`;
     sent += 1;
@@ -122,17 +205,33 @@ async function fanout(
 
 export async function pollLinkedClubs(): Promise<{ clubs: number; sent: number }> {
   const sql = await getSql();
-  const clubs = await sql<{ ticker: string; stock_symbol: string; telegram_chat: string | null; discord_channel: string | null }>`
-    select ticker, stock_symbol, telegram_chat, discord_channel from clubs
+  const clubs = await sql<{
+    ticker: string;
+    stock_symbol: string;
+    telegram_chat: string | null;
+    discord_channel: string | null;
+    news_minutes: number | null;
+    news_kind: string | null;
+    last_price: string | null;
+    last_sent_at: string | null;
+  }>`
+    select ticker, stock_symbol, telegram_chat, discord_channel, news_minutes, news_kind, last_price, last_sent_at from clubs
     where stock_symbol is not null and (telegram_chat is not null or discord_channel is not null)
   `;
   let sent = 0;
   for (const club of clubs) {
+    const minutes = Math.max(5, Number(club.news_minutes) || 5);
+    const last = club.last_sent_at ? new Date(club.last_sent_at).getTime() : 0;
+    if (last && Date.now() - last < minutes * 60 * 1000) continue;
     const [move, news] = await Promise.all([
       quote(club.stock_symbol).catch(() => null),
       headlines(club.stock_symbol).catch(() => [] as StockNews[]),
     ]);
-    sent += await fanout(club.ticker, club.telegram_chat, club.discord_channel, move?.change ?? null, news);
+    const previous = club.last_price == null ? null : Number(club.last_price);
+    const surge = move && previous ? formatSurge(move.raw, previous) : null;
+    const kind = club.news_kind || "all";
+    sent += await fanout(club.ticker, club.stock_symbol, club.telegram_chat, club.discord_channel, surge, filterNews(news, kind, surge), kind);
+    if (move) await sql`update clubs set last_price = ${move.raw}, last_sent_at = now() where ticker = ${club.ticker}`;
   }
   return { clubs: clubs.length, sent };
 }
@@ -146,28 +245,35 @@ export async function loadDesk(symbol: string | null, ticker: string | null): Pr
     quote(clean).catch(() => null),
     headlines(clean).catch(() => [] as StockNews[]),
   ]);
-  const loss = move ? !move.up : false;
   let telegram: StockDesk["telegram"] = "off";
   let discord: StockDesk["discord"] = "off";
+  let change: string | null = null;
+  let up: boolean | null = null;
   if (ticker) {
     const sql = await getSql();
-    const rows = await sql<{ telegram_chat: string | null; discord_channel: string | null }>`
-      select telegram_chat, discord_channel from clubs where ticker = ${ticker}
+    const rows = await sql<{ telegram_chat: string | null; discord_channel: string | null; last_price: string | null }>`
+      select telegram_chat, discord_channel, last_price from clubs where ticker = ${ticker}
     `;
     const chat = rows[0]?.telegram_chat ?? null;
     const channel = rows[0]?.discord_channel ?? null;
+    const previous = rows[0]?.last_price == null ? null : Number(rows[0].last_price);
+    if (move && previous) {
+      const surge = formatSurge(move.raw, previous);
+      change = surge;
+      up = surge ? !surge.startsWith("-") : null;
+    }
     if (chat && process.env.TELEGRAM_BOT_TOKEN?.trim()) telegram = "linked";
     else if (chat) telegram = "waiting";
-    if (channel && process.env.DISCORD_BOT_TOKEN?.trim()) discord = "linked";
+    if (channel && (await discordBotToken())) discord = "linked";
     else if (channel) discord = "waiting";
-    void fanout(ticker, chat, channel, move?.change ?? null, news).catch(() => undefined);
+    void fanout(ticker, clean, chat, channel, null, news, "headlines").catch(() => undefined);
   }
   return {
     symbol: clean,
     price: move?.price ?? null,
-    change: move?.change ?? null,
-    up: move ? move.up : null,
-    loss,
+    change,
+    up,
+    loss: up === false,
     news,
     telegram,
     discord,
@@ -296,8 +402,18 @@ export async function linkDiscordChannel(code: string, channelId: string): Promi
   return { ok: true, ticker: row.ticker };
 }
 
-function discordInvite(): string | null {
-  const clientId = process.env.DISCORD_CLIENT_ID?.trim();
-  if (!clientId) return null;
-  return `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=2048&scope=bot%20applications.commands`;
+function discordInvite(): string {
+  return "https://discord.com/api/oauth2/authorize?client_id=1572602113102712842&permissions=2048&scope=bot%20applications.commands";
+}
+
+export async function saveNewsPrefs(ticker: string, founder: string, minutes: number, kind: string): Promise<{ ok: true } | { error: string }> {
+  const sql = await getSql();
+  const clubs = await sql<{ founder: string }>`select founder from clubs where ticker = ${ticker}`;
+  if (!clubs.length) return { error: "Club not found." };
+  if (clubs[0].founder !== founder) return { error: "Only the club creator can change news settings." };
+  const allowed = ["all", "headlines", "moves", "gains", "losses"];
+  const nextKind = allowed.includes(kind) ? kind : "all";
+  const nextMinutes = Math.min(240, Math.max(5, Math.round(minutes) || 5));
+  await sql`update clubs set news_minutes = ${nextMinutes}, news_kind = ${nextKind} where ticker = ${ticker}`;
+  return { ok: true };
 }

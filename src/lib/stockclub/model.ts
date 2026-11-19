@@ -31,6 +31,8 @@ export type Club = {
   discord: string | null;
   telegramLinked: boolean;
   discordLinked: boolean;
+  newsMinutes: number;
+  newsKind: string;
 };
 
 export type Post = {

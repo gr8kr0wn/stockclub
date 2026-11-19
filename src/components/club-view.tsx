@@ -131,7 +131,15 @@ export function ClubView({ ticker }: { ticker: string }) {
         </div>
       </header>
 
-      <StockField symbol={club.stockSymbol} ticker={club.ticker} telegramLinked={club.telegramLinked} discordLinked={club.discordLinked} founder={founder} />
+      <StockField
+        symbol={club.stockSymbol}
+        ticker={club.ticker}
+        telegramLinked={club.telegramLinked}
+        discordLinked={club.discordLinked}
+        minutes={club.newsMinutes}
+        kind={club.newsKind}
+        founder={founder}
+      />
 
       <div className="tabs" role="tablist">
         {TABS.map((item) => (
@@ -507,16 +515,21 @@ function StockField({
   ticker,
   telegramLinked,
   discordLinked,
+  minutes,
+  kind,
   founder,
 }: {
   symbol: string | null;
   ticker: string;
   telegramLinked: boolean;
   discordLinked: boolean;
+  minutes: number;
+  kind: string;
   founder: boolean;
 }) {
   const requestTelegram = useStock((s) => s.telegramCode);
   const requestDiscord = useStock((s) => s.discordCode);
+  const savePrefs = useStock((s) => s.saveNewsPrefs);
   const [desk, setDesk] = useState<{
     price: string | null;
     change: string | null;
@@ -531,6 +544,8 @@ function StockField({
   const [discordCode, setDiscordCode] = useState<string | null>(null);
   const [discordUrl, setDiscordUrl] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [every, setEvery] = useState(String(minutes || 5));
+  const [newsKind, setNewsKind] = useState(kind || "all");
   const telegramOn = telegramLinked || desk?.telegram === "linked";
   const discordOn = discordLinked || desk?.discord === "linked";
 
@@ -582,7 +597,33 @@ function StockField({
       ) : null}
       {founder ? (
         <div className="telegram-lock">
-          <p className="muted">You choose where news goes. Telegram, Discord, or both. Only the club creator can connect them. Each code lasts 10 minutes. If it expires, request a new one.</p>
+          <p className="muted">You choose where news goes, how often, and what kind. Telegram, Discord, or both. Only the club creator can change this. Each code lasts 10 minutes.</p>
+          <label>
+            Send every
+            <input value={every} onChange={(event) => setEvery(event.target.value.replace(/[^0-9]/g, "").slice(0, 3))} inputMode="numeric" />
+            <small>minutes. 5 is the shortest.</small>
+          </label>
+          <label>
+            What to send
+            <select value={newsKind} onChange={(event) => setNewsKind(event.target.value)}>
+              <option value="all">Headlines and the last move</option>
+              <option value="headlines">Headlines only</option>
+              <option value="moves">Last move only</option>
+              <option value="gains">Gains only</option>
+              <option value="losses">Losses only</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-lime btn-slim"
+            onClick={() => {
+              void savePrefs(ticker, Number(every) || 5, newsKind).then((result) => {
+                setCodeError(result.ok ? null : result.reason);
+              });
+            }}
+          >
+            Save news settings
+          </button>
           <div className="hero-actions">
             <button
               type="button"

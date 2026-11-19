@@ -58,6 +58,8 @@ const TOPICS = [
     title: "Add Telegram or Discord",
     body: [
       "Only the person who created the club can do this. Open the club and choose Add Telegram, Add Discord, or both.",
+      "Pick how many minutes between sends, and what to send: headlines, the last move, gains, losses, or all.",
+      "The percentage is the move since the last update, not the same day change repeated all day.",
       "Each code lasts 10 minutes. If it expires before you finish, request a new one.",
       "Telegram: send the code to the bot in a private chat, then add the bot to the group.",
       "Discord: invite the bot to the server, then type /link and the code in the channel you want.",
