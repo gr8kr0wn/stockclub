@@ -662,7 +662,7 @@ function StockField({
           </div>
           {telegramCode ? (
             <p className="muted">
-              Telegram code <span className="link-code">{telegramCode}</span>. Send it to the bot in private, then add the bot to the group.
+              Telegram code <span className="link-code">{telegramCode}</span>. Send it to the bot in private, then add the bot to the group you want. News goes to that group.
             </p>
           ) : null}
           {telegramUrl ? (
@@ -672,15 +672,13 @@ function StockField({
           ) : null}
           {discordCode ? (
             <p className="muted">
-              Discord code <span className="link-code">{discordCode}</span>. Invite the bot, then type <strong>/link {discordCode}</strong> in the channel.
+              Discord code <span className="link-code">{discordCode}</span>. Invite the bot, open the channel you want, and type <strong>/link {discordCode}</strong> there. You pick the channel. News goes to that channel.
             </p>
           ) : null}
           {discordUrl ? (
             <a className="text-link" href={discordUrl} target="_blank" rel="noreferrer">
               Invite the Discord bot
             </a>
-          ) : discordCode ? (
-            <p className="muted">The Discord bot is not live yet. The code is saved. Add the bot token and it will accept /link.</p>
           ) : null}
           {codeError ? <p className="form-error">{codeError}</p> : null}
         </div>

@@ -30,6 +30,17 @@ const NAV = [
   { to: "/faq", label: "Help", icon: CircleHelp },
 ] as const;
 
+const WALLETS = [
+  { name: "MetaMask", hint: "Opens MetaMask", link: (url: string) => `https://metamask.app.link/dapp/${url.replace(/^https?:\/\//, "")}` },
+  { name: "Coinbase Wallet", hint: "Opens Coinbase", link: (url: string) => `https://go.cb-w.com/dapp?cb_url=${encodeURIComponent(url)}` },
+  { name: "Trust Wallet", hint: "Opens Trust", link: (url: string) => `https://link.trustwallet.com/open_url?coin_id=60&url=${encodeURIComponent(url)}` },
+  { name: "Rainbow", hint: "Opens Rainbow", link: (url: string) => `https://rnbwapp.com/dapp?url=${encodeURIComponent(url)}` },
+  { name: "Phantom", hint: "Opens Phantom", link: (url: string) => `https://phantom.app/ul/browse/${encodeURIComponent(url)}?ref=${encodeURIComponent(url)}` },
+  { name: "OKX Wallet", hint: "Opens OKX", link: (url: string) => `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://wallet/dapp/url?dappUrl=${url}`)}` },
+  { name: "Bitget Wallet", hint: "Opens Bitget", link: (url: string) => `https://bkcode.vip?action=dapp&url=${encodeURIComponent(url)}` },
+  { name: "Zerion", hint: "Opens Zerion", link: (url: string) => `https://wallet.zerion.io/dapp?url=${encodeURIComponent(url)}` },
+] as const;
+
 export function Shell({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const wallet = useStock((s) => s.wallet);
@@ -49,6 +60,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [menu, setMenu] = useState(false);
   const [gear, setGear] = useState(false);
   const [stocks, setStocks] = useState<StockHit[]>([]);
+  const [walletQuery, setWalletQuery] = useState("");
 
   useEffect(() => {
     void Promise.resolve(useStock.persist.rehydrate()).then(() => refresh());
@@ -251,16 +263,39 @@ export function Shell({ children }: { children: ReactNode }) {
               </button>
             </div>
             <p className="muted">
-              Sign a message with your Base wallet. The signature proves the address. USDC only moves when you confirm a transfer.
+              Search a wallet and open it from this browser. Once the app opens, connect there. If you are already inside a wallet browser, use the buttons at the bottom.
             </p>
             {connectError ? <p className="form-error">{connectError}</p> : null}
+            <label className="wallet-search">
+              <Search size={15} />
+              <input
+                value={walletQuery}
+                onChange={(event) => setWalletQuery(event.target.value)}
+                placeholder="Search MetaMask, Coinbase, Trust..."
+                aria-label="Search wallet apps"
+              />
+            </label>
+            <div className="wallet-list">
+              {WALLETS.filter((item) => item.name.toLowerCase().includes(walletQuery.trim().toLowerCase())).map((item) => (
+                <a
+                  key={item.name}
+                  className="wallet-option"
+                  href={item.link(window.location.origin)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <span>{item.name}</span>
+                  <small>{item.hint}</small>
+                </a>
+              ))}
+            </div>
             <button type="button" className="wallet-option" disabled={busy} onClick={() => void connect("browser")}>
-              <span>Browser wallet</span>
+              <span>Already in a wallet browser</span>
               <small>MetaMask or any injected wallet on Base</small>
             </button>
             <button type="button" className="wallet-option" disabled={busy} onClick={() => void connect("coinbase")}>
-              <span>Coinbase Wallet</span>
-              <small>The Coinbase extension, on Base</small>
+              <span>Coinbase extension</span>
+              <small>Use this if the Coinbase extension is installed here</small>
             </button>
           </div>
         </div>
